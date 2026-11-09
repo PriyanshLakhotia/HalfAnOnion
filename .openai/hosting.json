@@ -4,5 +4,8 @@
     "migrations_dir": "drizzle"
   },
   "r2": null,
-  "project_id": "appgprj_6af1ede578548191b3fdb396ddfef163"
+  "project_id": "appgprj_6af1ede578548191b3fdb396ddfef163",
+  "capabilities": [
+    "mcp"
+  ]
 }

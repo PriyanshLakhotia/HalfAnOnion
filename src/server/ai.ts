@@ -1,0 +1,214 @@
+import { z } from "zod";
+import { DomainError, operationSchema, today, schemas } from "../domain/model";
+import {
+  body,
+  json,
+  snapshot,
+  mutate,
+  limit,
+  sha,
+  type Actor,
+  type Env,
+} from "./service";
+export async function bridge(env: Env, path: string, payload: unknown = {}) {
+  if (!env.BRIDGE_URL || !env.BRIDGE_SECRET)
+    throw new DomainError(
+      "The household assistant is not connected yet. Manual planning and shopping are ready.",
+      503,
+    );
+  const url = new URL(env.BRIDGE_URL);
+  if (url.protocol !== "https:")
+    throw new DomainError("The assistant requires a secure connection.", 503);
+  const r = await fetch(new URL(path, url), {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + env.BRIDGE_SECRET,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(path === "/command" ? 120000 : 20000),
+  });
+  let data: any;
+  try {
+    data = await r.json();
+  } catch {
+    throw new DomainError(
+      "The assistant did not respond. Your input is saved.",
+      502,
+    );
+  }
+  if (!r.ok)
+    throw new DomainError(
+      data.error ?? "Assistant unavailable. Try again later.",
+      r.status === 429 ? 429 : 503,
+    );
+  return data;
+}
+export async function aiRoute(
+  request: Request,
+  env: Env,
+  actor: Actor,
+  path: string,
+) {
+  if (path === "/api/ai/status") {
+    const snap = await snapshot(env, actor);
+    if (!env.BRIDGE_URL)
+      return json({
+        connected: false,
+        available: false,
+        transcription: !!env.OPENAI_API_KEY,
+        model: snap.state.model,
+        reasoning: snap.state.reasoning,
+      });
+    try {
+      return json({
+        ...(await bridge(env, "/status")),
+        transcription: !!env.OPENAI_API_KEY,
+      });
+    } catch (e: any) {
+      return json({
+        connected: false,
+        available: false,
+        transcription: !!env.OPENAI_API_KEY,
+        error: e.message,
+      });
+    }
+  }
+  if (
+    ["/api/ai/connect", "/api/ai/disconnect", "/api/ai/models"].includes(path)
+  ) {
+    if (actor.role !== "owner")
+      throw new DomainError(
+        "Only the owner can manage the AI connection.",
+        403,
+      );
+    return json(await bridge(env, path.replace("/api/ai", "")));
+  }
+  if (path === "/api/ai/command") {
+    const input = z
+      .object({
+        id: z.string().uuid(),
+        text: z.string().trim().min(1).max(4000),
+        context: z.string().max(8000).optional(),
+      })
+      .parse(await body(request));
+    await limit(env.DB, "agent:" + actor.household_id, 30, 86400000);
+    const snap = await snapshot(env, actor);
+    const context = {
+      today: today(),
+      timezone: "Europe/Amsterdam",
+      speaker: actor.id,
+      members: snap.members,
+      entities: {
+        ...snap.state.entities,
+        memories: Object.fromEntries(
+          Object.entries(snap.state.entities.memories).filter(
+            ([, m]) => !m.forgotten,
+          ),
+        ),
+      },
+    };
+    const result = await bridge(env, "/command", {
+      ...input,
+      priorContext: input.context,
+      context,
+      model: snap.state.model,
+      reasoning: snap.state.reasoning,
+    });
+    if (result.status !== "completed")
+      throw new DomainError(
+        result.status === "interrupted"
+          ? "The instruction was cancelled. No changes were applied."
+          : "The assistant could not complete this instruction. No changes were applied.",
+        502,
+      );
+    const parsed = z
+      .object({
+        message: z.string().max(1200),
+        actions: operationSchema.shape.actions.optional(),
+        followUp: z.boolean().optional(),
+      })
+      .parse(result.result);
+    if (parsed.followUp || !parsed.actions?.length)
+      return json({ message: parsed.message, completed: false });
+    if (
+      parsed.actions.some(
+        (a) =>
+          ["settings", "clear-history"].includes(a.type) || a.kind === "offers",
+      )
+    )
+      throw new DomainError(
+        "The assistant cannot change account settings or invent offers.",
+        403,
+      );
+    const destructive = parsed.actions.filter(
+      (a) => a.type === "remove" || a.type === "forget",
+    );
+    if (destructive.length > 1)
+      return json({
+        message:
+          "This would remove several records. Review those changes in the app before continuing.",
+        completed: false,
+      });
+    const operation = { id: input.id, actions: parsed.actions };
+    const saved = await mutate(env, actor, operation, "assistant");
+    return json({
+      message: parsed.message,
+      completed: true,
+      operationId: saved.id,
+      context: JSON.stringify({
+        text: input.text,
+        result: parsed.message,
+      }).slice(0, 8000),
+    });
+  }
+  if (path === "/api/transcribe") {
+    if (!env.OPENAI_API_KEY)
+      throw new DomainError(
+        "Voice transcription is not connected. You can type your instruction.",
+        503,
+      );
+    await limit(env.DB, "transcribe:" + actor.household_id, 20, 86400000);
+    if (Number(request.headers.get("Content-Length") ?? 0) > 8 * 1024 * 1024)
+      throw new DomainError("Keep recordings under one minute.", 413);
+    const data = await request.formData(),
+      file = data.get("audio");
+    if (
+      !(file instanceof File) ||
+      file.size > 8 * 1024 * 1024 ||
+      file.size < 300
+    )
+      throw new DomainError("The recording was empty or too long.");
+    if (
+      !["audio/webm", "audio/mp4", "audio/mpeg", "audio/wav", "audio/ogg"].some(
+        (t) => file.type.startsWith(t),
+      )
+    )
+      throw new DomainError("This recording format is unsupported.");
+    const form = new FormData();
+    form.append("file", file);
+    form.append("model", "gpt-4o-mini-transcribe");
+    form.append(
+      "prompt",
+      "Household groceries and meals in English, Hindi and Hinglish. Ingredients may include paneer, dal, chawal, jeera, atta. Dutch stores: Albert Heijn, ALDI, Jumbo, PLUS, Bahar Delft.",
+    );
+    const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.OPENAI_API_KEY },
+      body: form,
+      signal: AbortSignal.timeout(55000),
+    });
+    if (!r.ok)
+      throw new DomainError(
+        r.status === 429
+          ? "Transcription limit reached. Try again later."
+          : "Could not transcribe this recording. Try again or type.",
+        r.status === 429 ? 429 : 502,
+      );
+    const result: any = await r.json();
+    if (!result.text?.trim())
+      throw new DomainError("No speech found. Try again.");
+    return json({ text: result.text });
+  }
+  throw new DomainError("Not found.", 404);
+}
