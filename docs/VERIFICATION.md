@@ -2,11 +2,15 @@
 
 ## Proven in this environment
 
-`npm run check`, `npm run build`, `npm test`: **23 passing tests** against the domain layer and an actual Miniflare Worker/D1 instance (no live household test records). Companion JavaScript syntax checks also pass.
+`npm run check`, `npm run build`, `npm test`: **25 passing tests** against the domain layer and an actual Miniflare Worker/D1 instance (no live household test records). Companion JavaScript syntax checks also pass.
 
-Coverage: two independent username/password sessions; one household; single-use and revoked invitations; anonymous/foreign-household denial; CSRF denial; owner-only invitation/AI connection management; idempotent operation replay; simultaneous purchase and another member's addition; expected-field conflict handling; undo refusing another member's later edit; proposal acceptance distinct from purchase; grocery quantity scaling without duplicate shared portions; rerun/dismissal suppression; forgotten-memory suppression; participant authorization; allergy checks; variant/unit/branch distinctions; Amsterdam date/DST boundaries; time-commitment thresholds; Bahar exclusion; offer date/source/freshness/personal-offer rejection; export excluding credentials; honest disconnected-AI state and no paid reasoning fallback.
+Coverage: two independent username/password sessions; one household; single-use and revoked invitations; anonymous/foreign-household denial; CSRF denial; owner-only invitation/AI connection management; idempotent operation replay; simultaneous purchase and another member's addition; expected-field conflict handling; undo refusing another member's later edit; proposal acceptance distinct from purchase; unmarked AI additions defaulting to proposals; automatic meal grocery reconciliation; grocery quantity scaling without duplicate shared portions; rerun/dismissal suppression; forgotten-memory suppression; participant authorization; allergy checks; variant/unit/branch distinctions; Amsterdam date/DST boundaries; time-commitment thresholds; Bahar exclusion; offer date/source/freshness/personal-offer rejection; export excluding credentials; honest disconnected-AI state and no paid reasoning fallback.
 
 Incremental GitHub main milestones: runnable foundation, durable household services, UI/offline queue, and prepared AI/discovery adapters, followed by verification repairs. Original history and configured author preserved. GitHub is a non-fork repository with main as its default branch. No promise is made about contribution-graph timing or account-email association beyond the repository's configured author.
+
+## Deployment
+
+The private production URL is https://half-an-onion.techstuff19.chatgpt.site. The initial publication succeeded and the live D1 overview confirms all seven application tables. Production logs show household state requests without an app session returning 401. The native publication screenshot captured the loading state only; it does not validate completed app rendering.
 
 ## Unverified or intentionally disconnected
 

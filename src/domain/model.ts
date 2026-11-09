@@ -83,7 +83,7 @@ export const schemas = {
       ])
       .default("confirmed"),
     origin: z
-      .enum(["manual", "instruction", "recipe", "offer"])
+      .enum(["manual", "instruction", "recipe", "offer", "inference"])
       .default("manual"),
     sourceId: z.string().max(180).default(""),
     sourceKey: z.string().max(500).default(""),
@@ -354,7 +354,9 @@ export function applyOperation(
           version: (before?.version ?? 0) + 1,
         }
       : null;
-    changes.push({ kind, id, before, after });
+    const existingChange = changes.find((c) => c.kind === kind && c.id === id);
+    if (existingChange) existingChange.after = after;
+    else changes.push({ kind, id, before, after });
     if (after) state.entities[kind][id] = after;
     else delete state.entities[kind][id];
   };
@@ -394,6 +396,108 @@ export function applyOperation(
     )
       throw new DomainError("Memory scope is not in this household.");
     return v;
+  };
+  const calculateGroceries = (data: any) => {
+    const range = z
+      .object({ from: date, to: date, confirm: z.boolean().default(false) })
+      .parse(data);
+    if (range.from > range.to)
+      throw new DomainError("Choose a valid date range.");
+    const needed = new Map<string, any>();
+    const generatedKeys = new Set<string>();
+    const affectedMealIds = new Set(
+      [
+        ...Object.values(input.entities.meals),
+        ...Object.values(state.entities.meals),
+      ]
+        .filter((m) => m.date >= range.from && m.date <= range.to)
+        .map((m) => m.id),
+    );
+    for (const meal of Object.values(state.entities.meals).filter(
+      (m) => m.date >= range.from && m.date <= range.to && m.kind === "cooking",
+    ))
+      for (const c of meal.components) {
+        const recipe = state.entities.recipes[c.recipeId];
+        if (!recipe) continue;
+        for (const ingredient of recipe.ingredients) {
+          const key = matchKey(ingredient);
+          const quantity =
+            ingredient.quantity === null
+              ? null
+              : (ingredient.quantity * c.servings) / recipe.servings;
+          const rec = needed.get(key) ?? {
+            ...ingredient,
+            quantity: quantity === null ? null : 0,
+            mealIds: [],
+            end: meal.date,
+          };
+          rec.quantity =
+            rec.quantity === null || quantity === null
+              ? null
+              : rec.quantity + quantity;
+          rec.mealIds.push(meal.id);
+          rec.end = rec.end > meal.date ? rec.end : meal.date;
+          needed.set(key, rec);
+        }
+      }
+    for (const [key, n] of needed) {
+      const sourceKey =
+        "groceries:" + key + ":" + [...new Set(n.mealIds)].sort().join(",");
+      const existing = Object.values(state.entities.items).find(
+        (i) => i.sourceKey === sourceKey,
+      );
+      if (
+        existing &&
+        ["dismissed", "confirmed", "purchased", "removed"].includes(
+          existing.status,
+        )
+      )
+        continue;
+      if (
+        Object.values(state.entities.items).some(
+          (i) =>
+            ["confirmed", "purchased"].includes(i.status) &&
+            matchKey(i) === key,
+        )
+      )
+        continue;
+      const pantry = Object.values(state.entities.pantry).find(
+        (p) => matchKey({ ...p, storeId: n.storeId }) === key,
+      );
+      if (
+        pantry?.state === "have" &&
+        pantry.confirmedAt &&
+        now - pantry.confirmedAt < 3 * DAY
+      )
+        continue;
+      generatedKeys.add(sourceKey);
+      save(
+        "items",
+        existing?.id ?? crypto.randomUUID(),
+        validate("items", {
+          ...n,
+          status: range.confirm ? "confirmed" : "proposed",
+          origin: "recipe",
+          sourceKey,
+          sourceId: n.mealIds.join(","),
+          expiresOn: plusDays(n.end, 1),
+          notes: pantry
+            ? "Pantry " + pantry.state + "; check before buying."
+            : "Pantry quantity not confirmed.",
+        }),
+      );
+    }
+    for (const item of Object.values(state.entities.items)) {
+      if (
+        item.status === "proposed" &&
+        item.origin === "recipe" &&
+        item.sourceId
+          .split(",")
+          .some((id: string) => affectedMealIds.has(id)) &&
+        !generatedKeys.has(item.sourceKey)
+      )
+        save("items", item.id, { ...item, status: "expired" });
+    }
   };
   for (const a of op.actions) {
     const kind = a.kind;
@@ -438,86 +542,7 @@ export function applyOperation(
       continue;
     }
     if (a.type === "groceries") {
-      const range = z
-        .object({ from: date, to: date, confirm: z.boolean().default(false) })
-        .parse(a.data);
-      if (range.from > range.to)
-        throw new DomainError("Choose a valid date range.");
-      const needed = new Map<string, any>();
-      for (const meal of Object.values(state.entities.meals).filter(
-        (m) =>
-          m.date >= range.from && m.date <= range.to && m.kind === "cooking",
-      ))
-        for (const c of meal.components) {
-          const recipe = state.entities.recipes[c.recipeId];
-          if (!recipe) continue;
-          for (const ingredient of recipe.ingredients) {
-            const key = matchKey(ingredient);
-            const quantity =
-              ingredient.quantity === null
-                ? null
-                : (ingredient.quantity * c.servings) / recipe.servings;
-            const rec = needed.get(key) ?? {
-              ...ingredient,
-              quantity: quantity === null ? null : 0,
-              mealIds: [],
-              end: meal.date,
-            };
-            rec.quantity =
-              rec.quantity === null || quantity === null
-                ? null
-                : rec.quantity + quantity;
-            rec.mealIds.push(meal.id);
-            rec.end = rec.end > meal.date ? rec.end : meal.date;
-            needed.set(key, rec);
-          }
-        }
-      for (const [key, n] of needed) {
-        const sourceKey =
-          "groceries:" + key + ":" + [...new Set(n.mealIds)].sort().join(",");
-        const existing = Object.values(state.entities.items).find(
-          (i) => i.sourceKey === sourceKey,
-        );
-        if (
-          existing &&
-          ["dismissed", "confirmed", "purchased", "removed"].includes(
-            existing.status,
-          )
-        )
-          continue;
-        if (
-          Object.values(state.entities.items).some(
-            (i) =>
-              ["confirmed", "purchased"].includes(i.status) &&
-              matchKey(i) === key,
-          )
-        )
-          continue;
-        const pantry = Object.values(state.entities.pantry).find(
-          (p) => matchKey({ ...p, storeId: n.storeId }) === key,
-        );
-        if (
-          pantry?.state === "have" &&
-          pantry.confirmedAt &&
-          now - pantry.confirmedAt < 3 * DAY
-        )
-          continue;
-        save(
-          "items",
-          existing?.id ?? crypto.randomUUID(),
-          validate("items", {
-            ...n,
-            status: range.confirm ? "confirmed" : "proposed",
-            origin: "recipe",
-            sourceKey,
-            sourceId: n.mealIds.join(","),
-            expiresOn: plusDays(n.end, 1),
-            notes: pantry
-              ? "Pantry " + pantry.state + "; check before buying."
-              : "Pantry quantity not confirmed.",
-          }),
-        );
-      }
+      calculateGroceries(a.data);
       continue;
     }
     if (!kind) throw new DomainError("Choose a record type.");
@@ -529,6 +554,11 @@ export function applyOperation(
       if (kind === "items" && source === "manual") {
         v.status = "confirmed";
         v.origin = "manual";
+      }
+      if (kind === "items" && source === "assistant") {
+        // Missing origin must never turn an inferred recommendation into a purchase task.
+        if (v.origin === "manual") v.origin = "inference";
+        v.status = v.origin === "instruction" ? "confirmed" : "proposed";
       }
       if (
         kind === "memories" &&
@@ -643,6 +673,20 @@ export function applyOperation(
         });
       }
     }
+  }
+  // Planning updates infer proposals immediately; undo restores its own recorded changes.
+  if (
+    !op.actions.some((a) => a.type === "groceries" || a.type === "undo") &&
+    changes.some((c) => c.kind === "meals" || c.kind === "recipes")
+  ) {
+    const lastDate = [
+      ...Object.values(input.entities.meals),
+      ...Object.values(state.entities.meals),
+    ].reduce(
+      (last, meal) => (meal.date > last ? meal.date : last),
+      currentDate,
+    );
+    calculateGroceries({ from: currentDate, to: lastDate });
   }
   // Reconcile proposals only. Accepted groceries remain independent of recipe changes.
   for (const i of Object.values(state.entities.items)) {

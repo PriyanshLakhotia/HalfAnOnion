@@ -93,6 +93,48 @@ test("manual additions are confirmed regardless of client supplied proposal flag
   assert.equal(s.entities.items.i.status, "confirmed");
   assert.equal(s.entities.items.i.origin, "manual");
 });
+test("assistant additions require explicit instruction provenance for confirmation", () => {
+  const s = run(
+    emptyState(),
+    [
+      { type: "put", kind: "items", id: "unspecified", data: { name: "rice" } },
+      {
+        type: "put",
+        kind: "items",
+        id: "recipe",
+        data: { name: "lentils", origin: "recipe", status: "confirmed" },
+      },
+      {
+        type: "put",
+        kind: "items",
+        id: "offer",
+        data: { name: "paneer", origin: "offer", status: "purchased" },
+      },
+      {
+        type: "put",
+        kind: "items",
+        id: "requested",
+        data: { name: "milk", origin: "instruction", status: "proposed" },
+      },
+    ],
+    "one",
+    "assistant",
+  );
+  for (const id of ["unspecified", "recipe", "offer"])
+    assert.equal(s.entities.items[id].status, "proposed");
+  assert.equal(s.entities.items.unspecified.origin, "inference");
+  assert.equal(s.entities.items.requested.status, "confirmed");
+  assert.throws(() =>
+    run(s, [
+      {
+        type: "purchase",
+        kind: "items",
+        id: "offer",
+        data: { purchased: true },
+      },
+    ]),
+  );
+});
 test("field conflicts reject a stale overwrite while unrelated edits coexist", () => {
   let s = run(emptyState(), [
     { type: "put", kind: "items", id: "i", data: { name: "rice" } },
@@ -187,6 +229,62 @@ test("groceries scale component servings once and do not resurrect dismissal", (
   s = run(s, [{ type: "dismiss", kind: "items", id: item.id }]);
   s = run(s, [calc]);
   assert.equal(Object.values(s.entities.items)[0].status, "dismissed");
+});
+test("meal edits automatically reconcile inferred groceries while preserving accepted items", () => {
+  const meal = (id: string, servings: number) => ({
+    type: "put",
+    kind: "meals",
+    id,
+    data: {
+      name: "Dal",
+      date: today(),
+      participants: ["one", "two"],
+      components: [
+        {
+          name: "Dal",
+          recipeId: "dal",
+          participants: ["one", "two"],
+          servings,
+        },
+      ],
+    },
+  });
+  let s = run(emptyState(), [
+    {
+      type: "put",
+      kind: "recipes",
+      id: "dal",
+      data: {
+        name: "Dal",
+        servings: 2,
+        ingredients: [{ name: "lentils", quantity: 200, unit: "g" }],
+      },
+    },
+    meal("dinner", 2),
+  ]);
+  const proposed = (state: State) =>
+    Object.values(state.entities.items).filter((i) => i.status === "proposed");
+  assert.equal(proposed(s)[0].quantity, 200);
+  s = run(s, [meal("lunch", 1)]);
+  assert.equal(proposed(s).length, 1);
+  assert.equal(proposed(s)[0].quantity, 300);
+  s = run(s, [
+    {
+      type: "patch",
+      kind: "recipes",
+      id: "dal",
+      data: { ingredients: [{ name: "lentils", quantity: 100, unit: "g" }] },
+    },
+  ]);
+  assert.equal(proposed(s)[0].quantity, 150);
+  const accepted = proposed(s)[0].id;
+  s = run(s, [{ type: "accept", kind: "items", id: accepted }]);
+  s = run(s, [
+    { type: "remove", kind: "meals", id: "dinner" },
+    { type: "remove", kind: "meals", id: "lunch" },
+  ]);
+  assert.equal(s.entities.items[accepted].status, "confirmed");
+  assert.equal(proposed(s).length, 0);
 });
 test("forgotten explicit facts suppress assistant relearning", () => {
   let s = run(emptyState(), [
