@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { build } from "esbuild";
 import { mkdir, readFile, writeFile, readdir, cp } from "node:fs/promises";
 await mkdir(".sites-runtime", { recursive: true });
@@ -13,6 +14,10 @@ const out = await build({
   target: "es2022",
 });
 const assets = {};
+const buildId = createHash("sha256")
+  .update(out.outputFiles.map((f) => f.text).join(""))
+  .digest("hex")
+  .slice(0, 16);
 for (const f of out.outputFiles) {
   const name = f.path.split("/").pop();
   assets["/" + name] = {
@@ -25,7 +30,9 @@ assets["/"] = {
   type: "text/html; charset=utf-8",
 };
 for (const name of await readdir("public")) {
-  const data = await readFile("public/" + name);
+  let data = await readFile("public/" + name);
+  if (name === "sw.js")
+    data = Buffer.from(data.toString().replaceAll("__BUILD_ID__", buildId));
   assets["/" + name] = {
     body: data.toString("base64"),
     base64: true,

@@ -14,9 +14,13 @@ const manifest = JSON.parse(await readFile(".openai/hosting.json", "utf8"));
 if (!c.remote_url.includes("/" + manifest.project_id + ".git"))
   throw new Error("Credential and Site identity do not match.");
 const run = (args, env = {}) => {
+  const childEnv = { ...process.env, ...env };
+  for (const key of Object.keys(childEnv))
+    if (key.startsWith("GIT_TRACE") || key === "GIT_CURL_VERBOSE")
+      delete childEnv[key];
   const r = spawnSync("git", args, {
     encoding: "utf8",
-    env: { ...process.env, GIT_TRACE: "0", GIT_CURL_VERBOSE: "0", ...env },
+    env: childEnv,
   });
   if (r.status)
     throw new Error(

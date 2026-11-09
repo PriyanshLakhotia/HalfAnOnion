@@ -322,6 +322,7 @@ function App() {
     [recording, setRecording] = useState(false),
     [transcribing, setTranscribing] = useState(false),
     [invite, setInvite] = useState(""),
+    [invitations, setInvitations] = useState<any[]>([]),
     [settings, setSettings] = useState("household");
   const recorder = useRef<MediaRecorder | null>(null);
   const recordTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -357,6 +358,12 @@ function App() {
       if (recordTimer.current) clearTimeout(recordTimer.current);
     };
   }, []);
+  useEffect(() => {
+    if (data?.user.role === "owner" && tab === "settings")
+      api("/api/invites")
+        .then(setInvitations)
+        .catch(() => {});
+  }, [data?.user.id, tab, invite]);
   async function act(actions: Operation["actions"]) {
     try {
       await k.act(actions);
@@ -1471,6 +1478,37 @@ function App() {
                         )}
                       </div>
                     )}
+                    {user.role === "owner" &&
+                      invitations
+                        .filter(
+                          (i) =>
+                            !i.revoked &&
+                            !i.used_by &&
+                            i.expires_at > Date.now(),
+                        )
+                        .map((i) => (
+                          <div className="setting-row" key={i.hash}>
+                            <small>
+                              Invitation · expires{" "}
+                              {new Date(i.expires_at).toLocaleDateString(
+                                "en-GB",
+                              )}
+                            </small>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await api("/api/invites", { revoke: i.hash });
+                                  setInvitations(await api("/api/invites"));
+                                  setInvite("");
+                                } catch (e: any) {
+                                  k.setError(e.message);
+                                }
+                              }}
+                            >
+                              Revoke
+                            </button>
+                          </div>
+                        ))}
                   </section>
                   <section className="settings-section">
                     <div className="section-heading">

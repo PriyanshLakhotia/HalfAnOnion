@@ -215,7 +215,14 @@ const credentials = z.object({
     .trim()
     .toLowerCase()
     .regex(/^[a-z0-9_]{3,30}$/, "Use 3–30 letters, numbers or underscores."),
-  password: z.string().min(12, "Use at least 12 characters.").max(72),
+  password: z
+    .string()
+    .min(12, "Use at least 12 characters.")
+    .max(72)
+    .refine(
+      (p) => new TextEncoder().encode(p).length <= 72,
+      "Password must fit within 72 UTF-8 bytes.",
+    ),
 });
 async function session(env: Env, actor: Actor) {
   const raw = token(),
@@ -238,6 +245,7 @@ export async function authRoute(request: Request, env: Env, path: string) {
           env.BOOTSTRAP_OWNER_EMAIL.toLowerCase(),
     });
   }
+  if (request.method !== "POST") throw new DomainError("POST required.", 405);
   sameOrigin(request);
   const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
   await limit(env.DB, "auth-ip:" + (await sha(ip)));
@@ -339,9 +347,11 @@ export async function authRoute(request: Request, env: Env, path: string) {
       household = crypto.randomUUID();
       await env.DB.batch([
         env.DB.prepare(
-          "INSERT INTO households (id,name,state,version,created_at) VALUES (?,?,?,0,?)",
+          "INSERT INTO households (id,name,state,version,created_at) SELECT ?,?,?,0,? WHERE NOT EXISTS(SELECT 1 FROM households)",
         ).bind(household, p.householdName, JSON.stringify(emptyState()), now),
-        env.DB.prepare("INSERT INTO accounts VALUES (?,?,?,?,?,?,?,?)").bind(
+        env.DB.prepare(
+          "INSERT INTO accounts SELECT ?,?,?,?,?,?,?,? WHERE changes()=1",
+        ).bind(
           id,
           c.username,
           password,

@@ -13,6 +13,7 @@ export type Snapshot = {
 };
 export type Pending = {
   id: string;
+  createdAt: number;
   actor: string;
   household: string;
   op: Operation;
@@ -49,7 +50,7 @@ export async function api<T = any>(path: string, data?: any): Promise<T> {
     credentials: "same-origin",
     headers: data === undefined ? {} : { "Content-Type": "application/json" },
     ...(data === undefined ? {} : { body: JSON.stringify(data) }),
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(path === "/api/ai/command" ? 125000 : 30000),
   });
   const result: any = await response.json();
   if (!response.ok)
@@ -74,7 +75,9 @@ export function useKitchen() {
     [notice, setNotice] = useState(""),
     [needsLogin, setNeedsLogin] = useState(false);
   async function queues() {
-    return await idb<Pending[]>("queue", "readonly", (s) => s.getAll());
+    return (await idb<Pending[]>("queue", "readonly", (s) => s.getAll())).sort(
+      (a, b) => a.createdAt - b.createdAt,
+    );
   }
   async function project(snap: Snapshot) {
     const q = (await queues()).filter(
@@ -198,6 +201,7 @@ export function useKitchen() {
     applyOperation(data.state, op, data.user.id, data.members);
     const p = {
       id: op.id,
+      createdAt: Date.now(),
       actor: data.user.id,
       household: data.household.id,
       op,

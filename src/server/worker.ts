@@ -71,6 +71,12 @@ export default {
           request.method === "POST"
         )
           return await accountRoute(request, env, actor, path);
+        if (
+          ((path.startsWith("/api/ai/") && path !== "/api/ai/status") ||
+            path === "/api/transcribe") &&
+          request.method !== "POST"
+        )
+          throw new DomainError("POST required.", 405);
         if (path.startsWith("/api/ai/") || path === "/api/transcribe")
           return await aiRoute(request, env, actor, path);
         throw new DomainError("Not found.", 404);
@@ -87,7 +93,9 @@ export default {
           "Content-Type": asset.type,
           "X-Content-Type-Options": "nosniff",
           "Referrer-Policy": "same-origin",
-          "Cache-Control": path === "/" ? "no-cache" : "public, max-age=3600",
+          "Cache-Control": ["/", "/main.js", "/main.css"].includes(path)
+            ? "no-cache"
+            : "public, max-age=3600",
           "Content-Security-Policy":
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'",
           ...(path === "/sw.js"
