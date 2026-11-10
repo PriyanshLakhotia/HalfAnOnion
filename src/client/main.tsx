@@ -318,6 +318,7 @@ function App() {
       () => sessionStorage.getItem("onion-draft") ?? "",
     ),
     [processing, setProcessing] = useState(false),
+    [connecting, setConnecting] = useState(false),
     [ai, setAi] = useState<any>({ connected: false, transcription: false }),
     [recording, setRecording] = useState(false),
     [transcribing, setTranscribing] = useState(false),
@@ -436,6 +437,34 @@ function App() {
       setProcessing(false);
     }
   }
+  async function connectAssistant() {
+    setConnecting(true);
+    try {
+      if (ai.connected) { setAi({ ...ai, ...await api('/api/ai/disconnect', {}) }); return; }
+      const response = await fetch('/api/ai/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(210000) });
+      if (!response.ok) throw new Error(((await response.json()) as any).error ?? 'Could not start sign-in.');
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder(); let buffer = ''; let connected = false;
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const lines = buffer.split('\n'); buffer = lines.pop() ?? '';
+        for (const line of lines.filter(Boolean)) {
+          const event = JSON.parse(line);
+          if (event.error) throw new Error(event.error);
+          if (event.auth_url) {
+            const url = new URL(event.auth_url);
+            if (url.protocol !== 'https:' || !['auth.openai.com','chatgpt.com'].includes(url.hostname)) throw new Error('Unexpected sign-in URL.');
+            setModal({ kind: 'ai-connect', item: { ...event, id: 'connection', version: 1, actor: user.id, updatedAt: Date.now() } });
+          }
+          if (event.connected) { connected = true; setAi({ ...event, schedules: ai.schedules }); setModal(null); k.setNotice('ChatGPT connected. Your assistant is ready.'); }
+        }
+        if (done) break;
+      }
+      if (!connected) throw new Error('Sign-in did not finish. Connect ChatGPT again.');
+    } catch (error: any) { k.setError(error.message ?? 'Sign-in failed. Try again.'); }
+    finally { setConnecting(false); }
+  }
   async function voice() {
     if (recording) {
       recorder.current?.stop();
@@ -494,7 +523,7 @@ function App() {
           const res = await fetch("/api/transcribe", {
             method: "POST",
             body: form,
-            signal: AbortSignal.timeout(60000),
+            signal: AbortSignal.timeout(125000),
           });
           const result: any = await res.json();
           if (!res.ok) throw new Error(result.error);
@@ -1637,28 +1666,10 @@ function App() {
                     </div>
                     {user.role === "owner" && (
                       <button
-                        onClick={async () => {
-                          try {
-                            const r = await api(
-                              "/api/ai/" +
-                                (ai.connected ? "disconnect" : "connect"),
-                              {},
-                            );
-                            setAi({ ...ai, ...r });
-                            if (r.auth_url)
-                              open("ai-connect", {
-                                ...r,
-                                id: "connection",
-                                version: 1,
-                                actor: user.id,
-                                updatedAt: Date.now(),
-                              });
-                          } catch (e: any) {
-                            k.setError(e.message);
-                          }
-                        }}
+                        disabled={connecting}
+                        onClick={connectAssistant}
                       >
-                        {ai.connected ? "Disconnect" : "Connect ChatGPT"}
+                        {connecting ? "Waiting for sign-in…" : ai.connected ? "Disconnect" : "Connect ChatGPT"}
                       </button>
                     )}
                   </div>
@@ -1730,12 +1741,14 @@ function App() {
                       <strong>Voice input</strong>
                       <small>
                         {ai.transcription
-                          ? "API transcription available · separately billed"
-                          : "Transcription key not configured"}
+                          ? "Voice transcription ready"
+                          : "Available when the assistant service is connected"}
                       </small>
                     </div>
                     <Mic size={20} />
                   </div>
+                  <div className="setting-row"><div><strong>Automatic ideas</strong><small>{ai.schedules ? "Recipes daily at 09:00 · store offers weekly · Amsterdam time" : "Scheduled updates are being set up"}</small></div></div>
+                  <p className="fine">Voice runs on your household service. The first request after a quiet period may take a little longer.</p>
                   <p className="fine">
                     Recordings are discarded after transcription. No permanent
                     audio archive. Manual groceries, recipes and planning work
@@ -1989,13 +2002,15 @@ function App() {
               </a>
               <button
                 onClick={async () => {
+                  try {
                   const status = await api("/api/ai/status");
                   setAi(status);
                   if (status.connected) setModal(null);
                   else k.setError("Complete sign-in, then check again.");
+                  } catch (error: any) { k.setError(error.message); }
                 }}
               >
-                Check connection
+                {connecting ? "Waiting for authorization…" : "Check connection"}
               </button>
             </div>
           ) : (

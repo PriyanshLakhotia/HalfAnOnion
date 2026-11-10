@@ -19,6 +19,7 @@ export type Env = {
   BRIDGE_SECRET?: string;
   OPENAI_API_KEY?: string;
   DISCOVERY_SECRET?: string;
+  SCHEDULES_CONFIGURED?: string;
 };
 export type Actor = {
   id: string;

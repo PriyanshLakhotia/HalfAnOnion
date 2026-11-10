@@ -28,7 +28,7 @@ before(async () => {
     scriptPath: "dist/server/index.js",
     compatibilityDate: "2026-05-15",
     d1Databases: ["DB"],
-    bindings: { BOOTSTRAP_OWNER_EMAIL: "owner@test.invalid" },
+    bindings: { BOOTSTRAP_OWNER_EMAIL: "owner@test.invalid", BRIDGE_SECRET: "test-only-bridge-key-not-a-production-secret" },
     cf: false,
   });
   const db = await mf.getD1Database("DB");
@@ -256,4 +256,25 @@ test("another household cannot see or mutate original kitchen", async () => {
     ).status,
     404,
   );
+});
+
+test('scheduled callbacks require their secret and cannot change household plans', async () => {
+  const headers = { Authorization: 'Bearer test-only-bridge-key-not-a-production-secret' };
+  assert.equal((await req('/internal/jobs/context', {})).status, 401);
+  const context = await req('/internal/jobs/context', {}, '', headers);
+  assert.equal(context.status, 200);
+  const state: any = await context.json();
+  assert.equal(JSON.stringify(state).includes('password'), false);
+  const forbidden = await req('/internal/jobs/recipes', {
+    id: crypto.randomUUID(), message: 'Changed shopping', followUp: false,
+    actions: [{ type: 'put', kind: 'items', id: crypto.randomUUID(), data: { name: 'Rice' } }],
+  }, '', headers);
+  assert.equal(forbidden.status, 403);
+  const accepted = await req('/internal/jobs/recipes', {
+    id: crypto.randomUUID(), message: 'Accepted plan', followUp: false,
+    actions: [{ type: 'put', kind: 'suggestions', id: crypto.randomUUID(), data: { status: 'accepted' } }],
+  }, '', headers);
+  assert.equal(accepted.status, 403);
+  const skipped = await req('/internal/jobs/context', { retailer: 'ALDI' }, '', headers);
+  assert.equal((await skipped.json() as any).skipped, true);
 });

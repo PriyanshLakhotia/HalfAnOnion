@@ -1,5 +1,6 @@
 import { mcp } from "./discovery";
 import { aiRoute } from "./ai";
+import { jobRoute } from "./jobs";
 import { assets } from "../../.sites-runtime/assets";
 import { DomainError, DAY } from "../domain/model";
 import { z } from "zod";
@@ -19,6 +20,7 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const path = new URL(request.url).pathname;
     try {
+      if (path.startsWith('/internal/jobs/')) return await jobRoute(request, env, path);
       if (path === "/mcp" && request.method === "POST")
         return await mcp(request, env);
       if (path.startsWith("/api/")) {

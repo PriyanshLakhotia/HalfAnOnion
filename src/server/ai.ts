@@ -56,20 +56,20 @@ export async function aiRoute(
       return json({
         connected: false,
         available: false,
-        transcription: !!env.OPENAI_API_KEY,
+        transcription: false,
         model: snap.state.model,
         reasoning: snap.state.reasoning,
       });
     try {
       return json({
         ...(await bridge(env, "/status")),
-        transcription: !!env.OPENAI_API_KEY,
+        schedules: env.SCHEDULES_CONFIGURED === "true",
       });
     } catch (e: any) {
       return json({
         connected: false,
         available: false,
-        transcription: !!env.OPENAI_API_KEY,
+        transcription: false,
         error: e.message,
       });
     }
@@ -82,6 +82,16 @@ export async function aiRoute(
         "Only the owner can manage the AI connection.",
         403,
       );
+    if (path === "/api/ai/connect") {
+      if (!env.BRIDGE_URL || !env.BRIDGE_SECRET) throw new DomainError("Companion hosting needs setup.", 503);
+      const url = new URL('/connect', env.BRIDGE_URL);
+      if (url.protocol !== 'https:') throw new DomainError('Secure assistant connection required.', 503);
+      const response = await fetch(url, {
+        method: 'POST', headers: { Authorization: 'Bearer ' + env.BRIDGE_SECRET, 'Content-Type': 'application/json' },
+        body: '{}', signal: AbortSignal.timeout(205000), redirect: 'error',
+      });
+      return new Response(response.body, { status: response.status, headers: { 'Content-Type': response.headers.get('Content-Type') ?? 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
+    }
     return json(await bridge(env, path.replace("/api/ai", "")));
   }
   if (path === "/api/ai/command") {
@@ -163,7 +173,7 @@ export async function aiRoute(
     });
   }
   if (path === "/api/transcribe") {
-    if (!env.OPENAI_API_KEY)
+    if (!env.BRIDGE_URL || !env.BRIDGE_SECRET)
       throw new DomainError(
         "Voice transcription is not connected. You can type your instruction.",
         503,
@@ -185,18 +195,13 @@ export async function aiRoute(
       )
     )
       throw new DomainError("This recording format is unsupported.");
-    const form = new FormData();
-    form.append("file", file);
-    form.append("model", "gpt-4o-mini-transcribe");
-    form.append(
-      "prompt",
-      "Household groceries and meals in English, Hindi and Hinglish. Ingredients may include paneer, dal, chawal, jeera, atta. Dutch stores: Albert Heijn, ALDI, Jumbo, PLUS, Bahar Delft.",
-    );
-    const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + env.OPENAI_API_KEY },
-      body: form,
-      signal: AbortSignal.timeout(55000),
+    const url = new URL('/transcribe', env.BRIDGE_URL);
+    if (url.protocol !== 'https:') throw new DomainError('Secure voice connection required.', 503);
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + env.BRIDGE_SECRET, 'Content-Type': file.type },
+      body: await file.arrayBuffer(),
+      signal: AbortSignal.timeout(115000), redirect: 'error',
     });
     if (!r.ok)
       throw new DomainError(
