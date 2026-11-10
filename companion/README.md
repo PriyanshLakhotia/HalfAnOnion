@@ -12,6 +12,12 @@ A private GCS object stores the dedicated login, daily budget and short-lived re
 
 Only `/healthz` is public. Site calls require the server-side `BRIDGE_SECRET`; scheduled routes require a verified Google OIDC token with the exact service audience and scheduler email. The owner alone can connect/disconnect via the Site. The service does not accept arbitrary model endpoints, shell tools, filesystem tools or caller-selected retrieval URLs.
 
+## Assistant output contract
+
+`src/domain/assistant.ts` derives the model's typed JSON output from the kitchen's Zod entity schemas. Creates use typed objects; edits use typed field/value/previous-value entries. Recipe and shopping origins are separate enums, prerequisites is text, recipe steps/ingredients/tags are arrays, and conversational replies may contain zero actions. The companion validates the entire batch against a cloned kitchen snapshot, including references and concurrent-edit expectations, before returning it. Invalid output gets one correction attempt within the request deadline. Failed correction returns a useful error and does not write household records. The Site revalidates before its atomic transaction; scheduled jobs retain their narrower proposal-only authorization.
+
+Run `npm run contract:build` after changing domain schemas and commit `companion/contract.mjs`. `npm run check` rejects a stale generated contract. GitHub Actions checks contract freshness, builds the Worker, and runs both application and companion tests on pushes and pull requests. Live model checks are explicit: with the verified candidate URL and bridge credential supplied securely in the environment, run `node --use-env-proxy scripts/verify-assistant-live.mjs`. This exercises the real model through an isolated local Worker/D1 kitchen; it uses subscription quota but does not modify production household records. The proxy flag is needed in managed environments that configure an outbound proxy.
+
 ## Voice
 
 Recordings are sent to the companion and transcribed using the multilingual Whisper base model running on its CPU. The image contains the model; cold starts do not download it. No OpenAI API key or paid transcription fallback is used. Audio files are private temporary files deleted after success/failure. Input is limited to 8 MiB / 65 seconds and a 90-second transcription deadline. English/Hindi/Hinglish accuracy and mobile microphone formats still need real-device acceptance testing.
@@ -38,6 +44,8 @@ Jobs skip unconfigured households and unselected retailers. Bahar Delft is exclu
 4. Commit and push `main`, then run the script's `build` and `deploy` phases. Resume existing operation IDs if a build/deployment remains pending.
 5. Configure the Site's `BRIDGE_URL` and secret `BRIDGE_SECRET` from the verified service URL and matching Secret Manager version. Publish the Site. Run `schedules`, then set Site `SCHEDULES_CONFIGURED=true` and publish that environment revision. Run `verify`.
 6. The owner completes official device login in the app. Verify a completed command, transcription, scheduled callback and a second cold-start request before claiming the integration operational.
+
+For an existing service, deploy with `ONION_CANARY=1 ONION_IMAGE_COMMIT=<built-commit>`. Current serving revisions retain their traffic while the `candidate` tag provides the new revision's test URL. After verifying that candidate, run the `promote` phase with the same `ONION_IMAGE_COMMIT`. Promotion checks the ready candidate matches the tested image before routing traffic to it.
 
 The service URL is printed by a successful deploy, never guessed. Provisioning does not change the Site audience. Current deployment blockers and actual validation are recorded in `docs/VERIFICATION.md`.
 

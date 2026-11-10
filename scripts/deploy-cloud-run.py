@@ -1,6 +1,6 @@
 """Reproducible Cloud Run deployment using Application Default Credentials.
 Install google-auth and requests in a venv. Run gcp-bootstrap.sh once as admin.
-Phases: prepare, build, deploy, schedules, verify. Secrets never appear in output.
+Phases: prepare, build, deploy, promote, schedules, verify. Secrets never appear in output.
 """
 import argparse
 import base64

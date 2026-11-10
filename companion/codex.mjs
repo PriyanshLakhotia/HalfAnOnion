@@ -297,7 +297,7 @@ export class CodexRuntime {
           console.warn('assistant_output_invalid', { attempt: attempt + 1, mode, issues });
           if (attempt || Date.now() >= deadline - 1000) throw new Error(INVALID_ASSISTANT_OUTPUT);
           input = {
-            instruction: 'Your previous response could not be applied. Correct it for the original request using the output schema and these validation errors. Preserve the requested intent and constraints. No changes have been saved. If a valid update is impossible or needs clarification, ask one specific follow-up and return no actions. Do not remove dietary constraints or overwrite newer data to bypass validation.',
+            instruction: 'Your previous response could not be applied. Correct it for the original request using the output schema and these validation errors. Preserve the requested intent and constraints. No changes have been saved. If a valid update is impossible or needs clarification, ask one specific follow-up and return no actions. Do not remove dietary constraints or overwrite newer data to bypass validation. In message, describe the requested food or kitchen changes in plain language. Do not mention validation, schemas, field names, internal IDs or the correction process.',
             validationErrors: issues,
           };
         }
