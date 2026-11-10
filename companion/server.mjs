@@ -6,6 +6,7 @@ import { CodexRuntime } from './codex.mjs';
 import { StateStore, once } from './state.mjs';
 import { transcribe } from './voice.mjs';
 import { runJob } from './jobs.mjs';
+import { LoginSessions, streamLogin } from './login.mjs';
 
 const key = process.env.BRIDGE_SECRET;
 if (!key || key.length < 32 || !process.env.STATE_BUCKET)
@@ -51,6 +52,14 @@ async function withRuntime(work) {
     }
   });
 }
+const logins = new LoginSessions(publish => withRuntime(async (runtime, data, commit) => {
+  publish(await runtime.connect());
+  const status = await runtime.waitForLogin();
+  if (!status.connected) throw new Error('Sign-in did not finish. Connect ChatGPT again.');
+  data.auth = await readFile(home + '/auth.json', 'utf8');
+  await commit();
+  return { ...status, transcription: true, transcription_provider: 'whisper' };
+}));
 const server = http.createServer(async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store');
@@ -75,29 +84,17 @@ const server = http.createServer(async (req, res) => {
       return send(200, await store.withLease(() => transcribe(bytes)));
     }
     const input = JSON.parse(bytes.toString() || '{}');
+    if (req.url === '/connect') return await streamLogin(logins.connect(), res);
     if (job) return send(200, await runJob(job, input, (id, task) => withRuntime(async (runtime, data, commit) => {
       if (!(await runtime.status()).connected) return { status: 'not-connected' };
       return once(data, commit, id, () => task(runtime));
     })));
     if (req.url === '/status' && active)
-      return send(200, { available: true, connected: false, busy: true, login_pending: true, transcription: true, transcription_provider: 'whisper' });
+      return send(200, { available: true, connected: false, busy: true, login_pending: !!logins.current, transcription: true, transcription_provider: 'whisper' });
     const result = await withRuntime(async (runtime, data, commit) => {
       if (req.url === '/status') return { ...await runtime.status(), transcription: true, transcription_provider: 'whisper' };
       if (req.url === '/models') return { models: await runtime.models() };
       if (req.url === '/disconnect') { const r = await runtime.disconnect(); delete data.auth; return r; }
-      if (req.url === '/connect') {
-        const code = await runtime.connect();
-        res.setHeader('Content-Type', 'application/x-ndjson');
-        res.write(JSON.stringify(code) + '\n');
-        const timer = setInterval(() => res.write('{"pending":true}\n'), 10000);
-        try {
-          const status = await runtime.waitForLogin();
-          data.auth = await readFile(home + '/auth.json', 'utf8');
-          await commit();
-          res.write(JSON.stringify({ ...status, transcription: true, transcription_provider: 'whisper' }) + '\n');
-        } finally { clearInterval(timer); }
-        return null;
-      }
       if (req.url !== '/command') throw Object.assign(new Error('Not found'), { status: 404 });
       if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(input.id) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 4000)
         throw Object.assign(new Error('Invalid instruction'), { status: 400 });
