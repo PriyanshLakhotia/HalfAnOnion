@@ -12,6 +12,8 @@ Current change: cold-start-safe Codex companion, streamed device sign-in, self-h
 
 ## Production deployment
 
+The final Site publication uses source `4f949a9ca7b7ceb7bec6fe5aa57f5eaae41a7439` and runtime environment revision 3. Server-to-server Site callback access returned 200 for the existing household. A real Cloud Scheduler recipe invocation at 2026-11-10 14:06:20 UTC completed with OK status, exercising Scheduler OIDC, Cloud Run and Site access. Since Codex is signed out, that invocation safely skipped model generation.
+
 All five Cloud Scheduler jobs were created successfully in Europe/Amsterdam: recipes daily at 09:00; AH Friday 14:00; ALDI Wednesday 14:00; Jumbo Saturday 14:00; PLUS Saturday 14:20. A live authenticated transcription request returned 200 and the expected words from the public Whisper fixture in 13 seconds.
 
 Cloud Run: `https://half-an-onion-companion-mhkhubkfza-ez.a.run.app`, revision `half-an-onion-companion-00002-s4k`, image source `7f6f56fa2734ca8f0ca4487a9d3ae116c7c68bab`. Request-based CPU billing is enabled (`cpuIdle: true`), minimum instances zero and maximum one. A signed-out authenticated `/status` request completed in about five seconds, returned the requested model in its catalog and reported the local voice adapter ready. Anonymous `/command` returned 401. The local container startup probe returned 200; the externally requested Cloud Run `/healthz` returned 404, so readiness is verified using Cloud Run's Ready condition and authenticated application requests.
