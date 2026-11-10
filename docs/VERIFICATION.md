@@ -10,6 +10,12 @@ Current change: cold-start-safe Codex companion, streamed device sign-in, self-h
 - Docker image build and isolated runtime smoke checks pass. Codex starts signed out and lists `gpt-6.1-sol`; this is a catalog check, not an entitlement claim. Whisper loads offline and successfully transcribes the upstream Whisper test fixture in about five seconds. `/healthz` returns 200 and unauthenticated assistant/job calls return 401.
 - No existing Codex credential was read or reused, no OpenAI API key was created, and no live model request was made. The owner still needs to complete the dedicated sign-in in Settings → Assistant. Model availability, token refresh, real cold-start persistence and retailer extraction require live verification.
 
+## Connection repair
+
+A reported Connect ChatGPT failure was traced to Cloudflare Workers rejecting `redirect: "error"` before making the outbound request. All Site-to-companion calls now share `requestBridge`, use `redirect: "manual"`, and explicitly reject 3xx responses without forwarding credentials. The old service worker also cached unversioned `/main.js`; HTML now references content-versioned JS/CSS so a normal navigation bypasses old caches.
+
+31 application tests pass, including streamed device-code delivery, redirect rejection and versioned asset loading. The deployed Site-to-Cloud-Run status probe returns 200 with assistant available and transcription enabled. Direct companion device-code initiation returned the official `auth.openai.com/codex/device` URL; the test login was not authorized. Source fix: `25befcab4b7994451bb3083a3cfd3cd31824e29f`. User account authorization remains to be completed.
+
 ## Production deployment
 
 The final Site publication uses source `4f949a9ca7b7ceb7bec6fe5aa57f5eaae41a7439` and runtime environment revision 3. Server-to-server Site callback access returned 200 for the existing household. A real Cloud Scheduler recipe invocation at 2026-11-10 14:06:20 UTC completed with OK status, exercising Scheduler OIDC, Cloud Run and Site access. Since Codex is signed out, that invocation safely skipped model generation.
