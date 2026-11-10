@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { DomainError, operationSchema, today, schemas } from "../domain/model";
+import { DomainError, today } from "../domain/model";
+import { parseAssistantResult, assistantValidationIssues, INVALID_ASSISTANT_OUTPUT } from '../domain/assistant';
 import {
   body,
   json,
@@ -40,7 +41,7 @@ export async function requestBridge(
   return response;
 }
 export async function bridge(env: Env, path: string, payload: unknown = {}) {
-  const r = await requestBridge(env, path, JSON.stringify(payload), 'application/json', path === '/command' ? 120000 : 20000);
+  const r = await requestBridge(env, path, JSON.stringify(payload), 'application/json', path === '/command' ? 185000 : 20000);
   let data: any;
   try {
     data = await r.json();
@@ -116,6 +117,7 @@ export async function aiRoute(
       timezone: "Europe/Amsterdam",
       speaker: actor.id,
       members: snap.members,
+      recentActivity: snap.state.activity.filter(a => a.actor === actor.id && !a.undone).slice(-10),
       entities: {
         ...snap.state.entities,
         memories: Object.fromEntries(
@@ -139,13 +141,13 @@ export async function aiRoute(
           : "The assistant could not complete this instruction. No changes were applied.",
         502,
       );
-    const parsed = z
-      .object({
-        message: z.string().max(1200),
-        actions: operationSchema.shape.actions.optional(),
-        followUp: z.boolean().optional(),
-      })
-      .parse(result.result);
+    let parsed;
+    try { parsed = parseAssistantResult(result.result); }
+    catch (error) {
+      if (error instanceof DomainError) throw error;
+      console.warn('assistant_output_rejected', { issues: assistantValidationIssues(error) });
+      throw new DomainError(INVALID_ASSISTANT_OUTPUT, 502);
+    }
     if (parsed.followUp || !parsed.actions?.length)
       return json({ message: parsed.message, completed: false });
     if (
@@ -168,7 +170,13 @@ export async function aiRoute(
         completed: false,
       });
     const operation = { id: input.id, actions: parsed.actions };
-    const saved = await mutate(env, actor, operation, "assistant");
+    let saved;
+    try { saved = await mutate(env, actor, operation, "assistant"); }
+    catch (error) {
+      if (!(error instanceof z.ZodError)) throw error;
+      console.warn('assistant_update_rejected', { issues: assistantValidationIssues(error) });
+      throw new DomainError(INVALID_ASSISTANT_OUTPUT, 502);
+    }
     return json({
       message: parsed.message,
       completed: true,

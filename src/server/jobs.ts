@@ -3,6 +3,7 @@ import { DomainError, today, operationSchema } from '../domain/model';
 import { body, json, sha, snapshot, mutate, type Actor, type Env } from './service';
 import { ingest } from './discovery';
 import { bridge } from './ai';
+import { parseAssistantResult, assistantValidationIssues, INVALID_ASSISTANT_OUTPUT } from '../domain/assistant';
 
 export async function jobRoute(request: Request, env: Env, path: string) {
   if (!env.BRIDGE_SECRET || await sha(request.headers.get('Authorization') ?? '') !== await sha('Bearer ' + env.BRIDGE_SECRET))
@@ -24,7 +25,17 @@ export async function jobRoute(request: Request, env: Env, path: string) {
   }
   if (path === '/internal/jobs/offers') return json(await ingest(env, actor, input));
   if (path === '/internal/jobs/recipes') {
-    const result = z.object({ id: z.string().uuid(), message: z.string().max(1200), followUp: z.boolean(), actions: operationSchema.shape.actions }).parse(input);
+    const id = z.string().uuid().parse(input.id);
+    // Preserve the schedule's narrower authorization before normalizing fields.
+    if (Array.isArray(input.actions) && input.actions.some((a: any) => a.type !== 'put' || !['recipes','suggestions'].includes(a.kind) || (a.kind === 'suggestions' && a.data?.status !== 'proposed')))
+      throw new DomainError('Scheduled recipes may only add up to three recipe proposals.', 403);
+    let result;
+    try { result = { id, ...parseAssistantResult(input) }; }
+    catch (error) {
+      if (error instanceof DomainError) throw error;
+      console.warn('scheduled_output_rejected', { issues: assistantValidationIssues(error) });
+      throw new DomainError(INVALID_ASSISTANT_OUTPUT, 502);
+    }
     if (result.followUp || !result.actions.length) return json({ skipped: true, reason: result.message });
     if (result.actions.length > 6 || result.actions.some(a => a.type !== 'put' || !['recipes','suggestions'].includes(a.kind ?? '') || !a.id))
       throw new DomainError('Scheduled recipes may only add up to three recipe proposals.', 403);

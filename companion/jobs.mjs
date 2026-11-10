@@ -37,18 +37,6 @@ export async function evidence(url, fetcher = fetch) {
   if (text.length < 300 || /access denied|verify you are human|captcha/i.test(text.slice(0, 1500))) throw new Error('Source unavailable');
   return { url, fetchedAt: Date.now(), text: (structured + '\n' + text).slice(0, 26000) };
 }
-const fields = ['name','retailer','variant','terms','quantity','start','end','sourceUrl','scope','loyalty','activation','productKey'];
-const offerSchema = {
-  type: 'object', additionalProperties: false, required: ['status','offers','note'],
-  properties: {
-    status: { type: 'string', enum: ['success','source-unavailable','not-yet-published'] },
-    note: { type: 'string' },
-    offers: { type: 'array', maxItems: 20, items: {
-      type: 'object', additionalProperties: false, required: [...fields,'price','fetchedAt'],
-      properties: { ...Object.fromEntries(fields.map(f => [f, {type:'string'}])), price: {type:['number','null']}, fetchedAt: {type:'number'} },
-    } },
-  },
-};
 export async function runJob(name, input, execute) {
   const retailer = name.startsWith('offers-') ? name.slice(7) : null;
   const context = await site('/internal/jobs/context', { retailer });
@@ -67,11 +55,11 @@ export async function runJob(name, input, execute) {
   }
   const output = await execute(id, async runtime => {
     const common = { model: context.state.model, reasoning: context.state.reasoning };
-    if (retailer) return runtime.command({ ...common, mode: 'offers', outputSchema: offerSchema,
+    if (retailer) return runtime.command({ ...common, mode: 'offers',
       text: 'Extract only current or upcoming, dated offers relevant to the household. Never infer campaign dates from today. Return source-unavailable if no verifiable dated offers are present.',
       context: { retailer, today: context.today, pages, ingredients: context.ingredients },
     });
-    return runtime.command({ ...common,
+    return runtime.command({ ...common, mode: 'recipes',
       text: 'Suggest up to three recipes for today using pantry, recent meals, preferences and verified active offers. Create recipes only when needed and proposed suggestions; do not change meals, shopping lists, preferences or settings. Suggestions expire in two days. Use only put actions for recipes and suggestions with new UUIDs. Never overwrite existing records. If dietary information is missing, return a follow-up with no actions.',
       context: { today: context.today, timezone: 'Europe/Amsterdam', speaker: context.ownerId, members: context.members, entities: context.state.entities },
     });
