@@ -1,5 +1,11 @@
 # Cloud Run integration verification — 10 November 2026
 
+## UI simplification — 10 November 2026
+
+Page headings now contain only their title. The normal sync/slogan bar, navigation icons, empty inspiration panel, decorative recipe covers, and repeated empty-state instructions have been removed. Shopping, recipes, pantry, settings, sign-in, and the assistant composer use shorter labels, neutral surfaces, and readable supporting text. Offline/pending-sync notices, error messages, and functional icon controls remain available.
+
+Validation: TypeScript and generated-contract checks, production Worker build, all 61 application tests, and companion syntax checks passed. Browser visual verification remains unverified: `sites-preview start` could not establish its browser relay, and the computer-use runtime failed to initialize (`the gaas-browser node_repl sandbox cannot be disabled`). No production household data was changed during validation.
+
 Current change: shared typed assistant contracts, validation before writes, one bounded correction attempt, and live model-to-database checks on top of the cold-start-safe Codex companion.
 
 - GitHub `main`: meaningful intermediate commits pushed; no rewritten history.

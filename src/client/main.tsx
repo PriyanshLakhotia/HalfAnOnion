@@ -1,10 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
-  CalendarDays,
-  ShoppingBasket,
-  BookOpen,
-  SlidersHorizontal,
   Plus,
   ArrowRight,
   ChevronLeft,
@@ -12,27 +8,13 @@ import {
   Check,
   X,
   Mic,
-  Send,
-  Undo2,
-  Search,
-  Leaf,
-  Clock,
-  Users,
-  Package,
-  WifiOff,
-  LogOut,
-  Link as LinkIcon,
   Trash2,
-  Download,
   Square,
-  ChevronDown,
-  ExternalLink,
   Settings2,
 } from "lucide-react";
 import {
   today,
   plusDays,
-  commitment,
   profileSchema,
   activeOffer,
   type Kind,
@@ -79,23 +61,10 @@ function Onion({ size = 38 }: { size?: number }) {
     </svg>
   );
 }
-function Empty({
-  icon: Icon = Leaf,
-  title,
-  children,
-  action,
-}: {
-  icon?: any;
-  title: string;
-  children?: React.ReactNode;
-  action?: React.ReactNode;
-}) {
+function Empty({ title }: { title: string }) {
   return (
     <div className="empty">
-      <Icon size={28} strokeWidth={1.2} />
-      <h3>{title}</h3>
-      <p>{children}</p>
-      {action}
+      <p>{title}</p>
     </div>
   );
 }
@@ -162,42 +131,14 @@ function Login({ done }: { done: () => void }) {
   }, []);
   return (
     <div className="login">
-      <div className="login-story">
+      <div className="login-form">
         <div className="brand">
           <Onion />
           <span>half an onion</span>
         </div>
-        <div>
-          <p className="eyebrow">A SHARED KITCHEN</p>
-          <h1>
-            Good food.
-            <br />
-            Less figuring
-            <br />
-            <em>it all out.</em>
-          </h1>
-          <p>
-            Meals, groceries, and the things
-            <br />
-            that make a kitchen yours.
-          </p>
-        </div>
-        <span className="story-foot">A little planning goes a long way.</span>
-      </div>
-      <div className="login-form">
-        <div className="mobile-brand brand">
-          <Onion />
-          <span>half an onion</span>
-        </div>
-        <p className="eyebrow">
-          {invite ? "YOU’RE INVITED" : "OUR EVERYDAY TABLE"}
-        </p>
-        <h2>{create ? "Make yourself at home." : "Back in the kitchen."}</h2>
-        <p className="muted">
-          {create
-            ? "Choose a username and password. No email needed."
-            : "Sign in to your shared household."}
-        </p>
+        <h1>
+          {create ? (invite ? "Join household" : "Create account") : "Sign in"}
+        </h1>
         <form
           onSubmit={async (e) => {
             e.preventDefault();
@@ -240,11 +181,7 @@ function Login({ done }: { done: () => void }) {
           </Field>
           <Field
             label="Password"
-            hint={
-              create
-                ? "At least 12 characters. Keep it somewhere safe."
-                : undefined
-            }
+            hint={create ? "At least 12 characters." : undefined}
           >
             <input
               name="password"
@@ -271,7 +208,6 @@ function Login({ done }: { done: () => void }) {
           )}
           <button className="primary wide" disabled={busy}>
             {busy ? "One moment…" : create ? "Create my account" : "Sign in"}
-            <ArrowRight size={18} />
           </button>
         </form>
         {!invite && (
@@ -285,7 +221,7 @@ function Login({ done }: { done: () => void }) {
               </button>
             ) : (
               <>
-                First time here? Use your household invitation.
+                Use an invitation to join a household.
                 <br />
                 <a href="/signin-with-chatgpt?return_to=%2F" target="_top">
                   Owner setup with ChatGPT
@@ -294,9 +230,6 @@ function Login({ done }: { done: () => void }) {
             )}
           </p>
         )}
-        <p className="fine">
-          No email service. No advertising. Just your kitchen.
-        </p>
       </div>
     </div>
   );
@@ -383,7 +316,7 @@ function App() {
     return (
       <div className="loading">
         <Onion />
-        <p>Opening the kitchen…</p>
+        <p>Loading…</p>
       </div>
     );
   if (!data) return <Login done={() => k.refresh()} />;
@@ -444,51 +377,98 @@ function App() {
   async function connectAssistant() {
     // Closing the dialog only hides it; keep the active request and code.
     if (connectingRef.current) {
-      if (signIn) setModal({ kind: 'ai-connect' });
+      if (signIn) setModal({ kind: "ai-connect" });
       return;
     }
     connectingRef.current = true;
     setConnecting(true);
-    setCopyMessage('');
+    setCopyMessage("");
     try {
-      if (ai.connected) { setAi({ ...ai, ...await api('/api/ai/disconnect', {}) }); return; }
-      const response = await fetch('/api/ai/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(210000) });
-      if (!response.ok) throw new Error(((await response.json()) as any).error ?? 'Could not start sign-in.');
+      if (ai.connected) {
+        setAi({ ...ai, ...(await api("/api/ai/disconnect", {})) });
+        return;
+      }
+      const response = await fetch("/api/ai/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        signal: AbortSignal.timeout(210000),
+      });
+      if (!response.ok)
+        throw new Error(
+          ((await response.json()) as any).error ?? "Could not start sign-in.",
+        );
       const reader = response.body!.getReader();
-      const decoder = new TextDecoder(); let buffer = ''; let connected = false;
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let connected = false;
       while (true) {
         const { value, done } = await reader.read();
         buffer += decoder.decode(value, { stream: !done });
-        const lines = buffer.split('\n'); buffer = lines.pop() ?? '';
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
         for (const line of lines.filter(Boolean)) {
           const event = JSON.parse(line);
           if (event.error) throw new Error(event.error);
           if (event.auth_url) {
             const url = new URL(event.auth_url);
-            if (url.protocol !== 'https:' || !['auth.openai.com','chatgpt.com'].includes(url.hostname)) throw new Error('Unexpected sign-in URL.');
-            setSignIn({ ...event, id: 'connection', version: 1, actor: user.id, updatedAt: Date.now() });
-            setModal({ kind: 'ai-connect' });
+            if (
+              url.protocol !== "https:" ||
+              !["auth.openai.com", "chatgpt.com"].includes(url.hostname)
+            )
+              throw new Error("Unexpected sign-in URL.");
+            setSignIn({
+              ...event,
+              id: "connection",
+              version: 1,
+              actor: user.id,
+              updatedAt: Date.now(),
+            });
+            setModal({ kind: "ai-connect" });
           }
-          if (event.connected) { connected = true; setAi({ ...event, schedules: ai.schedules }); setSignIn(null); setModal(current => current?.kind === 'ai-connect' ? null : current); k.setNotice('ChatGPT connected. Your assistant is ready.'); }
+          if (event.connected) {
+            connected = true;
+            setAi({ ...event, schedules: ai.schedules });
+            setSignIn(null);
+            setModal((current) =>
+              current?.kind === "ai-connect" ? null : current,
+            );
+            k.setNotice("ChatGPT connected. Your assistant is ready.");
+          }
         }
         if (done) break;
       }
-      if (!connected) throw new Error('Sign-in did not finish. Connect ChatGPT again.');
-    } catch (error: any) { setSignIn(null); k.setError(error.message ?? 'Sign-in failed. Try again.'); }
-    finally { connectingRef.current = false; setConnecting(false); }
+      if (!connected)
+        throw new Error("Sign-in did not finish. Connect ChatGPT again.");
+    } catch (error: any) {
+      setSignIn(null);
+      k.setError(error.message ?? "Sign-in failed. Try again.");
+    } finally {
+      connectingRef.current = false;
+      setConnecting(false);
+    }
   }
   async function copySignInCode() {
     if (!signIn?.user_code) return;
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      if (!navigator.clipboard?.writeText)
+        throw new Error("Clipboard unavailable");
       await navigator.clipboard.writeText(signIn.user_code);
-      setCopyMessage('Code copied.');
+      setCopyMessage("Code copied.");
     } catch {
       codeInput.current?.focus();
       codeInput.current?.select();
       let copied = false;
-      try { copied = document.execCommand('copy'); } catch { /* Keep the code selected for manual copying. */ }
-      setCopyMessage(copied ? 'Code copied.' : 'Code selected. Use Copy on your keyboard or touch menu.');
+      try {
+        copied = document.execCommand("copy");
+      } catch {
+        /* Keep the code selected for manual copying. */
+      }
+      setCopyMessage(
+        copied
+          ? "Code copied."
+          : "Code selected. Use Copy on your keyboard or touch menu.",
+      );
     }
   }
   async function voice() {
@@ -583,20 +563,20 @@ function App() {
         <p className="eyebrow kitchen-label">{data.household.name}</p>
         <nav>
           {[
-            ["plan", "The week", CalendarDays],
-            ["shop", "Shopping", ShoppingBasket],
-            ["recipes", "Recipe book", BookOpen],
-            ["pantry", "Pantry", Package],
-          ].map(([id, label, Icon]: any) => (
+            ["plan", "Week"],
+            ["shop", "Shopping"],
+            ["recipes", "Recipes"],
+            ["pantry", "Pantry"],
+          ].map(([id, label]) => (
             <button
               key={id}
               className={tab === id ? "nav active" : "nav"}
+              aria-current={tab === id ? "page" : undefined}
               onClick={() => {
                 setTab(id);
                 setSearch("");
               }}
             >
-              <Icon size={20} />
               <span>{label}</span>
               {id === "shop" && pending > 0 && (
                 <span className="count">{pending}</span>
@@ -609,15 +589,14 @@ function App() {
             <span>{user.name.slice(0, 1)}</span>
             <div>
               <strong>{user.name}</strong>
-              <small>{members.length} in this kitchen</small>
             </div>
           </div>
           <button
             className={tab === "settings" ? "nav active" : "nav"}
+            aria-current={tab === "settings" ? "page" : undefined}
             onClick={() => setTab("settings")}
           >
-            <SlidersHorizontal size={19} />
-            Kitchen settings
+            Settings
           </button>
         </div>
       </aside>
@@ -627,19 +606,15 @@ function App() {
             <Onion size={28} />
             half an onion
           </span>
-          <span className="top-note">
-            A little planning. A lot less wondering.
-          </span>
-          <span className={"sync-state " + (!k.online ? "offline" : "")}>
-            <span className="dot" />
-            {!k.online
-              ? "Offline"
-              : k.pending.length
-                ? `${k.pending.length} waiting to sync`
-                : "Shared & up to date"}
-          </span>
         </header>
         <main className="content">
+          {(!k.online || k.pending.length > 0) && (
+            <p className="sync-state" role="status">
+              {!k.online
+                ? "Offline · changes saved on this device"
+                : `${k.pending.length} changes waiting to sync`}
+            </p>
+          )}
           {(k.error || k.needsLogin) && (
             <div className="banner error" role="alert">
               <span>
@@ -674,17 +649,12 @@ function App() {
             <>
               <div className="page-heading">
                 <div>
-                  <p className="eyebrow">OUR EVERYDAY TABLE</p>
                   <h1>A week, well fed.</h1>
-                  <p className="muted">
-                    Room for a plan. And a change of plan.
-                  </p>
                 </div>
                 <button
                   className="primary"
                   onClick={() => open("meals", undefined, today())}
                 >
-                  <Plus size={18} />
                   Add a meal
                 </button>
               </div>
@@ -742,6 +712,13 @@ function App() {
                     <section
                       className={"day " + (date === today() ? "today" : "")}
                       key={date}
+                      aria-label={new Date(
+                        date + "T12:00:00",
+                      ).toLocaleDateString("en-GB", {
+                        weekday: "long",
+                        day: "numeric",
+                        month: "long",
+                      })}
                     >
                       <header>
                         <span>
@@ -751,14 +728,15 @@ function App() {
                           )}
                         </span>
                         <b>{Number(date.slice(-2))}</b>
-                        {date === today() && <i>Today</i>}
-                        <button
-                          className="icon day-add"
-                          aria-label={"Add meal on " + date}
-                          onClick={() => open("meals", undefined, date)}
-                        >
-                          <Plus size={16} />
-                        </button>
+                        {daily.length > 0 && (
+                          <button
+                            className="icon day-add"
+                            aria-label={"Add meal on " + date}
+                            onClick={() => open("meals", undefined, date)}
+                          >
+                            <Plus size={16} />
+                          </button>
+                        )}
                       </header>
                       <div className="day-meals">
                         {daily.map((m) => (
@@ -783,7 +761,6 @@ function App() {
                               </span>
                             )}
                             <span className="meal-people">
-                              <Users size={12} />
                               {m.participants.length === members.length
                                 ? "Everyone"
                                 : m.participants
@@ -793,12 +770,7 @@ function App() {
                                     )
                                     .join(", ")}
                             </span>
-                            {m.cooked && (
-                              <span className="cooked">
-                                <Check size={12} />
-                                Cooked
-                              </span>
-                            )}
+                            {m.cooked && <span className="cooked">Cooked</span>}
                           </button>
                         ))}
                         {!daily.length && (
@@ -806,10 +778,7 @@ function App() {
                             className="open-day"
                             onClick={() => open("meals", undefined, date)}
                           >
-                            Leave room
-                            <br />
-                            for something good.
-                            <Plus size={16} />
+                            Add meal
                           </button>
                         )}
                       </div>
@@ -827,39 +796,30 @@ function App() {
                     ])
                   }
                 >
-                  <ShoppingBasket size={16} />
-                  Suggest groceries for this week
-                  <ArrowRight size={15} />
+                  Suggest groceries
+                </button>
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    setText(
+                      "Suggest three meals for the gaps this week, using our recipes and preferences.",
+                    );
+                    document
+                      .querySelector<HTMLTextAreaElement>(".capture textarea")
+                      ?.focus();
+                  }}
+                >
+                  Suggest meals
                 </button>
               </div>
-              <section className="ideas">
-                <div className="section-heading">
-                  <div>
-                    <p className="eyebrow">A LITTLE INSPIRATION</p>
-                    <h2>Something to look forward to.</h2>
+              {suggestions.length > 0 && (
+                <section className="ideas">
+                  <div className="section-heading">
+                    <h2>Meal suggestions</h2>
                   </div>
-                  <button
-                    className="text-button"
-                    onClick={() => {
-                      setText(
-                        "Suggest three meals for the gaps this week, using our recipes and preferences.",
-                      );
-                      document
-                        .querySelector<HTMLTextAreaElement>(".capture textarea")
-                        ?.focus();
-                    }}
-                  >
-                    Ask for ideas
-                    <ArrowRight size={16} />
-                  </button>
-                </div>
-                {suggestions.length ? (
                   <div className="suggestion-grid">
                     {suggestions.map((s) => (
                       <article key={s.id}>
-                        <span className="tag">
-                          {commitment(s.totalMinutes)} time commitment
-                        </span>
                         <h3>{s.name}</h3>
                         <p>{s.reason}</p>
                         <small>
@@ -880,7 +840,6 @@ function App() {
                             }
                           >
                             Plan this
-                            <Plus size={16} />
                           </button>
                           <button
                             className="text-button"
@@ -900,45 +859,17 @@ function App() {
                       </article>
                     ))}
                   </div>
-                ) : (
-                  <div className="ideas-empty">
-                    <Leaf size={26} />
-                    <div>
-                      <strong>Let your kitchen inspire the next meal.</strong>
-                      <p>
-                        {recipes.length
-                          ? "Ask the assistant for a few ideas from your recipe book."
-                          : "Save a favourite recipe. Good ideas start with what you love."}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setTab("recipes");
-                        open("recipes");
-                      }}
-                    >
-                      Add a favourite
-                      <ArrowRight size={16} />
-                    </button>
-                  </div>
-                )}
-              </section>
+                </section>
+              )}
             </>
           )}
           {tab === "shop" && (
             <>
               <div className="page-heading">
                 <div>
-                  <p className="eyebrow">PICK UP WHAT MATTERS</p>
-                  <h1>The shopping list.</h1>
-                  <p className="muted">
-                    {pending
-                      ? `${pending} things to bring home.`
-                      : "A clear list. A calmer shop."}
-                  </p>
+                  <h1>Shopping</h1>
                 </div>
                 <button className="secondary" onClick={() => open("stores")}>
-                  <Plus size={17} />
                   Add a store
                 </button>
               </div>
@@ -984,10 +915,9 @@ function App() {
                   } catch {}
                 }}
               >
-                <Plus size={20} />
                 <input
                   name="name"
-                  placeholder="What do we need?"
+                  placeholder="Add an item"
                   aria-label="Grocery name"
                   required
                   maxLength={180}
@@ -1050,14 +980,11 @@ function App() {
                             >
                               {status === "proposed" && (
                                 <p className="proposal-label">
-                                  SUGGESTED FOR YOUR MEALS · NOT ON YOUR LIST
-                                  YET
+                                  Suggested · awaiting approval
                                 </p>
                               )}
                               {status === "purchased" && (
-                                <p className="purchased-label">
-                                  Already in the basket
-                                </p>
+                                <p className="purchased-label">Purchased</p>
                               )}
                               {group.map((i) => (
                                 <div
@@ -1135,7 +1062,6 @@ function App() {
                                         }
                                       >
                                         Add to list
-                                        <Plus size={14} />
                                       </button>
                                       <button
                                         className="icon"
@@ -1177,19 +1103,10 @@ function App() {
                 (i) =>
                   (store === "all" || i.storeId === store) &&
                   ["confirmed", "proposed", "purchased"].includes(i.status),
-              ) && (
-                <Empty icon={ShoppingBasket} title="Nothing on the list. Yet.">
-                  Add something above, or let your meal plan help.
-                </Empty>
-              )}
-              <div className="quiet-note">
-                <WifiOff size={15} />
-                Your saved list works offline. Changes sync when you’re back.
-              </div>
+              ) && <Empty title="No items on your list." />}
               <section className="offers-block">
                 <div className="section-heading">
-                  <h2>Worth a look.</h2>
-                  <span className="muted">Offers from your stores</span>
+                  <h2>Store offers</h2>
                 </div>
                 {entries(e.offers)
                   .filter(
@@ -1212,7 +1129,6 @@ function App() {
                       </div>
                       <a href={o.sourceUrl} target="_blank" rel="noreferrer">
                         Source
-                        <ExternalLink size={12} />
                       </a>
                       <button
                         onClick={() =>
@@ -1235,15 +1151,11 @@ function App() {
                         }
                       >
                         Add to list
-                        <Plus size={14} />
                       </button>
                     </div>
                   ))}
                 {!entries(e.offers).some((o) => activeOffer(o)) && (
-                  <p className="muted">
-                    No verified offers loaded. Your shopping list is ready
-                    regardless.
-                  </p>
+                  <p className="muted">No current offers.</p>
                 )}
                 <details>
                   <summary>Offer sources & freshness</summary>
@@ -1282,19 +1194,13 @@ function App() {
             <>
               <div className="page-heading">
                 <div>
-                  <p className="eyebrow">THE ONES WE COME BACK TO</p>
-                  <h1>Our recipe book.</h1>
-                  <p className="muted">
-                    Favourites, little experiments, and your own versions.
-                  </p>
+                  <h1>Recipes</h1>
                 </div>
                 <button className="primary" onClick={() => open("recipes")}>
-                  <Plus size={18} />
                   Save a recipe
                 </button>
               </div>
               <div className="search">
-                <Search size={18} />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -1314,38 +1220,17 @@ function App() {
                         .toLowerCase()
                         .includes(search.toLowerCase()),
                     )
-                    .map((r, i) => (
+                    .map((r) => (
                       <button
                         className="recipe-card"
                         key={r.id}
                         onClick={() => open("recipe-detail", r)}
                       >
-                        <div className={"recipe-art tone-" + (i % 4)}>
-                          <span>{r.name.slice(0, 1)}</span>
-                          <Onion size={60} />
-                        </div>
                         <div className="recipe-card-body">
-                          <p className="eyebrow">
-                            {r.origin === "variation"
-                              ? "OUR VERSION"
-                              : r.sourceUrl
-                                ? "SAVED FROM A LINK"
-                                : "FROM OUR KITCHEN"}
-                          </p>
                           <h3>{r.name}</h3>
-                          <div className="recipe-meta">
-                            <span>
-                              <Clock size={14} />
-                              {r.totalMinutes
-                                ? r.totalMinutes + " min"
-                                : "Time not set"}
-                            </span>
-                            <span>
-                              {r.totalMinutes
-                                ? commitment(r.totalMinutes) + " commitment"
-                                : ""}
-                            </span>
-                          </div>
+                          {r.totalMinutes > 0 && (
+                            <p className="recipe-meta">{r.totalMinutes} min</p>
+                          )}
                           {r.tags.length > 0 && (
                             <div className="tags">
                               {r.tags.slice(0, 3).map((t: string) => (
@@ -1358,19 +1243,7 @@ function App() {
                     ))}
                 </div>
               ) : (
-                <Empty
-                  icon={BookOpen}
-                  title="Every kitchen has its favourites."
-                  action={
-                    <button onClick={() => open("recipes")}>
-                      Save the first one
-                      <Plus size={16} />
-                    </button>
-                  }
-                >
-                  A full recipe, a useful link, or a version you’ve made your
-                  own.
-                </Empty>
+                <Empty title="No recipes saved." />
               )}
             </>
           )}
@@ -1378,14 +1251,9 @@ function App() {
             <>
               <div className="page-heading">
                 <div>
-                  <p className="eyebrow">ALREADY AT HOME</p>
-                  <h1>A little pantry check.</h1>
-                  <p className="muted">
-                    Keep a sense of what’s there. No counting every cumin seed.
-                  </p>
+                  <h1>Pantry</h1>
                 </div>
                 <button className="primary" onClick={() => open("pantry")}>
-                  <Plus size={18} />
                   Add a staple
                 </button>
               </div>
@@ -1435,23 +1303,10 @@ function App() {
                   </div>
                 ))
               ) : (
-                <Empty
-                  icon={Package}
-                  title="Start with the staples."
-                  action={
-                    <button onClick={() => open("pantry")}>
-                      Add a staple
-                      <Plus size={16} />
-                    </button>
-                  }
-                >
-                  Rice, lentils, the spices you reach for. Add just what’s
-                  useful.
-                </Empty>
+                <Empty title="No pantry items." />
               )}
               <p className="quiet-note">
-                “Have” is treated as recently checked for 3 days. “Usual” is a
-                habit, not a stock count.
+                “Have” stays current for 3 days. “Usual” doesn’t confirm stock.
               </p>
             </>
           )}
@@ -1459,8 +1314,7 @@ function App() {
             <>
               <div className="page-heading">
                 <div>
-                  <p className="eyebrow">MAKE IT YOURS</p>
-                  <h1>A kitchen that knows you.</h1>
+                  <h1>Settings</h1>
                 </div>
               </div>
               <div className="chips">
@@ -1477,7 +1331,7 @@ function App() {
               {settings === "household" && (
                 <>
                   <section className="settings-section">
-                    <h2>At our table</h2>
+                    <h2>Members</h2>
                     {members.map((m) => (
                       <div className="member-row" key={m.id}>
                         <span className="avatar">{m.name.slice(0, 1)}</span>
@@ -1498,7 +1352,7 @@ function App() {
                     {user.role === "owner" && (
                       <div className="invite-box">
                         <div>
-                          <strong>A place for someone else.</strong>
+                          <strong>Invite a member</strong>
                           <p>Single-use invitation. Expires after 48 hours.</p>
                         </div>
                         <button
@@ -1511,7 +1365,6 @@ function App() {
                           }}
                         >
                           Create invite
-                          <LinkIcon size={16} />
                         </button>
                         {invite && (
                           <Field label="Share this invitation">
@@ -1567,11 +1420,8 @@ function App() {
                   </section>
                   <section className="settings-section">
                     <div className="section-heading">
-                      <h2>Our stores</h2>
-                      <button onClick={() => open("stores")}>
-                        <Plus size={16} />
-                        Add store
-                      </button>
+                      <h2>Stores</h2>
+                      <button onClick={() => open("stores")}>Add store</button>
                     </div>
                     {stores
                       .filter((s) => s.id !== "any")
@@ -1617,7 +1467,6 @@ function App() {
                         location.reload();
                       }}
                     >
-                      <LogOut size={16} />
                       Sign out
                     </button>
                   </section>
@@ -1626,15 +1475,12 @@ function App() {
               {settings === "preferences" && (
                 <section className="settings-section">
                   <div className="section-heading">
-                    <h2>What we remember</h2>
+                    <h2>Preferences</h2>
                     <button onClick={() => open("memories")}>
-                      <Plus size={16} />
                       Add preference
                     </button>
                   </div>
-                  <p className="muted">
-                    Food habits and preferences. Allergies stay in your profile.
-                  </p>
+                  <p className="muted">Manage allergies in your profile.</p>
                   {memories.length ? (
                     memories.map((m) => (
                       <div className="memory-row" key={m.id}>
@@ -1668,15 +1514,13 @@ function App() {
                       </div>
                     ))
                   ) : (
-                    <Empty title="A fresh start.">
-                      Tell us what you like as you go.
-                    </Empty>
+                    <Empty title="No saved preferences." />
                   )}
                 </section>
               )}
               {settings === "assistant" && (
                 <section className="settings-section">
-                  <h2>One household assistant</h2>
+                  <h2>Assistant</h2>
                   <div className="setting-row">
                     <div>
                       <strong>
@@ -1686,8 +1530,8 @@ function App() {
                       </strong>
                       <small>
                         {ai.available
-                          ? "Subscription connection via Codex"
-                          : ai.error ?? "Companion hosting needs setup"}
+                          ? "Available to the household"
+                          : (ai.error ?? "Assistant unavailable")}
                       </small>
                     </div>
                     {user.role === "owner" && (
@@ -1695,14 +1539,18 @@ function App() {
                         disabled={connecting && !signIn}
                         onClick={connectAssistant}
                       >
-                        {connecting ? signIn ? "Show sign-in code" : "Starting sign-in…" : ai.connected ? "Disconnect" : ai.login_pending ? "Resume sign-in" : "Connect ChatGPT"}
+                        {connecting
+                          ? signIn
+                            ? "Show sign-in code"
+                            : "Starting sign-in…"
+                          : ai.connected
+                            ? "Disconnect"
+                            : ai.login_pending
+                              ? "Resume sign-in"
+                              : "Connect ChatGPT"}
                       </button>
                     )}
                   </div>
-                  <p className="muted">
-                    Only the owner connects ChatGPT. The household uses the
-                    assistant without receiving the owner’s credentials.
-                  </p>
                   <Field label="Model">
                     <select
                       value={state.model}
@@ -1771,30 +1619,34 @@ function App() {
                           : "Available when the assistant service is connected"}
                       </small>
                     </div>
-                    <Mic size={20} />
                   </div>
-                  <div className="setting-row"><div><strong>Automatic ideas</strong><small>{ai.schedules ? "Recipes daily at 09:00 · store offers weekly · Amsterdam time" : "Scheduled updates are being set up"}</small></div></div>
-                  <p className="fine">Voice runs on your household service. The first request after a quiet period may take a little longer.</p>
+                  <div className="setting-row">
+                    <div>
+                      <strong>Automatic ideas</strong>
+                      <small>
+                        {ai.schedules
+                          ? "Recipes daily at 09:00 · store offers weekly · Amsterdam time"
+                          : "Scheduled updates are being set up"}
+                      </small>
+                    </div>
+                  </div>
                   <p className="fine">
-                    Recordings are discarded after transcription. No permanent
-                    audio archive. Manual groceries, recipes and planning work
-                    without AI.
+                    Recordings are deleted after transcription.
                   </p>
                 </section>
               )}
               {settings === "data" && (
                 <>
                   <section className="settings-section">
-                    <h2>Your kitchen, your data</h2>
+                    <h2>Data</h2>
                     <div className="setting-row">
                       <div>
-                        <strong>Take a copy</strong>
+                        <strong>Export data</strong>
                         <small>
                           Meals, recipes, lists, pantry and preferences.
                         </small>
                       </div>
                       <a className="button" href="/api/export" download>
-                        <Download size={16} />
                         Export JSON
                       </a>
                     </div>
@@ -1828,7 +1680,7 @@ function App() {
                     )}
                   </section>
                   <section className="settings-section">
-                    <h2>Keep it close</h2>
+                    <h2>Install app</h2>
                     <p className="muted">
                       iPhone: Safari → Share → Add to Home Screen.
                       <br />
@@ -1847,13 +1699,11 @@ function App() {
         <div className="capture-wrap">
           {k.notice && (
             <div className="toast" role="status">
-              <Check size={14} />
               <span>{k.notice}</span>
               {latest && (
                 <button
                   onClick={() => quietly([{ type: "undo", id: latest.id }])}
                 >
-                  <Undo2 size={14} />
                   Undo
                 </button>
               )}
@@ -1879,13 +1729,13 @@ function App() {
             </button>
             <textarea
               rows={1}
-              aria-label="Tell your kitchen"
+              aria-label="Ask the assistant"
               placeholder={
                 recording
                   ? "Listening… tap to stop"
                   : transcribing
                     ? "Transcribing…"
-                    : "Tell your kitchen. “Paneer at Bahar, dinner for both tomorrow…”"
+                    : "Ask the assistant…"
               }
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -1909,30 +1759,40 @@ function App() {
               )}
             </button>
           </div>
-          <p className="capture-hint">
-            {recording
-              ? "Recording · up to 60 seconds"
-              : transcribing
-                ? "Audio is discarded after transcription"
-                : ai.connected
-                  ? "Your household assistant · English, Hindi or Hinglish"
-                  : "Your household assistant · connect ChatGPT in settings"}
-          </p>
+          {(recording || transcribing || !ai.connected) && (
+            <p className="capture-hint">
+              {recording ? (
+                "Recording · 60 seconds max"
+              ) : transcribing ? (
+                "Transcribing…"
+              ) : (
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    setTab("settings");
+                    setSettings("assistant");
+                  }}
+                >
+                  Connect ChatGPT
+                </button>
+              )}
+            </p>
+          )}
         </div>
         <nav className="bottom-nav">
           {[
-            ["plan", "Week", CalendarDays],
-            ["shop", "Shop", ShoppingBasket],
-            ["recipes", "Recipes", BookOpen],
-            ["pantry", "Pantry", Package],
-            ["settings", "Settings", SlidersHorizontal],
-          ].map(([id, label, Icon]: any) => (
+            ["plan", "Week"],
+            ["shop", "Shop"],
+            ["recipes", "Recipes"],
+            ["pantry", "Pantry"],
+            ["settings", "Settings"],
+          ].map(([id, label]) => (
             <button
               key={id}
               className={tab === id ? "selected" : ""}
+              aria-current={tab === id ? "page" : undefined}
               onClick={() => setTab(id)}
             >
-              <Icon size={20} />
               <span>{label}</span>
             </button>
           ))}
@@ -1944,7 +1804,7 @@ function App() {
             modal.kind === "recipe-detail"
               ? modal.item!.name
               : modal.kind === "profile"
-                ? "Your place at the table"
+                ? "Your profile"
                 : modal.kind === "signin"
                   ? "Sign in to sync"
                   : modal.kind === "ai-connect"
@@ -2013,30 +1873,49 @@ function App() {
             />
           ) : modal.kind === "ai-connect" ? (
             <div className="form-body">
-              {signIn ? <>
-              <p>
-                Open the official sign-in page and enter this one-time code.
-              </p>
-              <div className="device-code-row">
-                <input ref={codeInput} className="device-code" aria-label="One-time sign-in code" readOnly value={signIn.user_code} onFocus={event => event.target.select()} />
-                <button type="button" onClick={copySignInCode}>Copy code</button>
-              </div>
-              <p className="muted" role="status" aria-live="polite">{copyMessage || 'Waiting for you to authorize in ChatGPT…'}</p>
-              <a
-                className="button primary"
-                target="_blank"
-                rel="noreferrer"
-                href={signIn.auth_url}
-              >
-                Continue to ChatGPT
-                <ExternalLink size={16} />
-              </a>
-              <p className="muted">This code expires in a few minutes. You can close this dialog and use Show sign-in code to reopen it. After a refresh, use Resume sign-in to return to the same code.</p>
-              <button onClick={() => setModal(null)}>Hide for now</button>
-              </> : <>
-                <p>The sign-in attempt has ended. Try again to resume an active sign-in or get a new code.</p>
-                <button disabled={connecting} onClick={connectAssistant}>{connecting ? 'Starting sign-in…' : 'Try sign-in again'}</button>
-              </>}
+              {signIn ? (
+                <>
+                  <p>
+                    Open the official sign-in page and enter this one-time code.
+                  </p>
+                  <div className="device-code-row">
+                    <input
+                      ref={codeInput}
+                      className="device-code"
+                      aria-label="One-time sign-in code"
+                      readOnly
+                      value={signIn.user_code}
+                      onFocus={(event) => event.target.select()}
+                    />
+                    <button type="button" onClick={copySignInCode}>
+                      Copy code
+                    </button>
+                  </div>
+                  <p className="muted" role="status" aria-live="polite">
+                    {copyMessage || "Waiting for you to authorize in ChatGPT…"}
+                  </p>
+                  <a
+                    className="button primary"
+                    target="_blank"
+                    rel="noreferrer"
+                    href={signIn.auth_url}
+                  >
+                    Continue to ChatGPT
+                  </a>
+                  <p className="muted">
+                    Code expires in a few minutes. You can close this dialog and
+                    resume sign-in.
+                  </p>
+                  <button onClick={() => setModal(null)}>Hide for now</button>
+                </>
+              ) : (
+                <>
+                  <p>Sign-in ended. Try again.</p>
+                  <button disabled={connecting} onClick={connectAssistant}>
+                    {connecting ? "Starting sign-in…" : "Try sign-in again"}
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             <Editor
@@ -2073,11 +1952,6 @@ function RecipeDetail({
   return (
     <div className="form-body recipe-detail">
       <div className="recipe-detail-meta">
-        <span className="tag">
-          {r.totalMinutes
-            ? commitment(r.totalMinutes) + " time commitment"
-            : "Time not set"}
-        </span>
         <span>
           {r.activeMinutes} min active · {r.totalMinutes} min total
         </span>
@@ -2138,13 +2012,11 @@ function RecipeDetail({
           className="source-link"
         >
           Original recipe
-          <ExternalLink size={14} />
         </a>
       )}
       <div className="form-footer">
         <button className="primary" onClick={plan}>
           Plan this
-          <Plus size={16} />
         </button>
         <button onClick={edit}>Edit</button>
         <button className="text-button" onClick={variation}>
@@ -2508,7 +2380,6 @@ function Editor({
                   ])
                 }
               >
-                <Plus size={15} />
                 Add a component
               </button>
             </details>
@@ -2683,7 +2554,6 @@ function Editor({
                 ])
               }
             >
-              <Plus size={15} />
               Add ingredient
             </button>
             <Field label="Steps" hint="One step per line.">
@@ -2720,10 +2590,6 @@ function Editor({
               />
               Include in automatic offer discovery
             </label>
-            <p className="fine">
-              Bahar Delft is shopping only. Stores remain useful without a
-              website or offers.
-            </p>
             <details>
               <summary>Find a branch</summary>
               <p className="fine">
@@ -2738,7 +2604,6 @@ function Editor({
                 ].map(([n, url]) => (
                   <a key={n} href={url} target="_blank" rel="noreferrer">
                     {n}
-                    <ExternalLink size={12} />
                   </a>
                 ))}
               </div>
@@ -2896,7 +2761,6 @@ function Editor({
             : kind === "delete-household"
               ? "Delete household"
               : "Save"}
-          <Check size={16} />
         </button>
         <button type="button" onClick={close}>
           Cancel
