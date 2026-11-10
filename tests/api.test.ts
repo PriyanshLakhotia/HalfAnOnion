@@ -278,3 +278,20 @@ test('scheduled callbacks require their secret and cannot change household plans
   const skipped = await req('/internal/jobs/context', { retailer: 'ALDI' }, '', headers);
   assert.equal((await skipped.json() as any).skipped, true);
 });
+
+test('scheduled recipe proposals are saved once and mismatched retries are refused', async () => {
+  const headers = { Authorization: 'Bearer test-only-bridge-key-not-a-production-secret' };
+  const context: any = await (await req('/internal/jobs/context', {}, '', headers)).json();
+  const recipeId = crypto.randomUUID(), suggestionId = crypto.randomUUID();
+  const input = { id: crypto.randomUUID(), message: 'A recipe idea', followUp: false, actions: [
+    {type: 'put', kind: 'recipes', id: recipeId, data: {name: 'Rice bowl', origin: 'generated'}},
+    {type: 'put', kind: 'suggestions', id: suggestionId, data: {name: 'Rice bowl', recipeId, participants: [context.ownerId], status: 'proposed', expiresOn: '2099-01-01'}},
+  ] };
+  const first = await req('/internal/jobs/recipes', input, '', headers);
+  assert.equal(first.status, 200, await first.clone().text());
+  const replay = await req('/internal/jobs/recipes', input, '', headers);
+  assert.equal(replay.status, 200);
+  assert.deepEqual(await first.json(), await replay.json());
+  input.actions[0].data.name = 'A different recipe';
+  assert.equal((await req('/internal/jobs/recipes', input, '', headers)).status, 409);
+});

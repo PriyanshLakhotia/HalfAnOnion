@@ -28,7 +28,7 @@ export async function jobRoute(request: Request, env: Env, path: string) {
       throw new DomainError('Scheduled recipes may only add up to three recipe proposals.', 403);
     // A callback retry uses the receipt before checking IDs that the first call created.
     const receipt = await env.DB.prepare('SELECT result FROM receipts WHERE id=? AND household_id=?').bind(result.id, actor.household_id).first<{result:string}>();
-    if (receipt) return json(JSON.parse(receipt.result));
+    if (receipt) return json(await mutate(env, actor, {id: result.id, actions: result.actions}, 'assistant'));
     for (const action of result.actions) {
       if (snap.state.entities[action.kind!][action.id!]) throw new DomainError('Scheduled suggestions cannot overwrite records.', 409);
       if (action.kind === 'suggestions' && action.data?.status !== 'proposed')
