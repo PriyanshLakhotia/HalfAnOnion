@@ -2,11 +2,13 @@ import { z } from 'zod';
 import { DomainError, today, operationSchema } from '../domain/model';
 import { body, json, sha, snapshot, mutate, type Actor, type Env } from './service';
 import { ingest } from './discovery';
+import { bridge } from './ai';
 
 export async function jobRoute(request: Request, env: Env, path: string) {
   if (!env.BRIDGE_SECRET || await sha(request.headers.get('Authorization') ?? '') !== await sha('Bearer ' + env.BRIDGE_SECRET))
     throw new DomainError('Unauthorized.', 401);
   if (request.method !== 'POST') throw new DomainError('POST required.', 405);
+  if (path === '/internal/jobs/assistant-status') return json(await bridge(env, '/status'));
   const actor = await env.DB.prepare("SELECT * FROM accounts WHERE role='owner' LIMIT 1").first<Actor>();
   if (!actor) return json({ skipped: true, reason: 'Set up the household first.' });
   const input: any = await body(request);

@@ -28,6 +28,9 @@ export async function bridge(env: Env, path: string, payload: unknown = {}) {
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(path === "/command" ? 120000 : 20000),
     redirect: 'error',
+  }).catch((error: unknown) => {
+    console.error('bridge_request_failed', {path, type: error instanceof Error ? error.name : 'unknown', message: error instanceof Error ? error.message.slice(0, 250) : 'unknown'});
+    throw new DomainError('Could not reach the assistant service. Try again in a moment.', 503);
   });
   let data: any;
   try {

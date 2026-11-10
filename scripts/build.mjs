@@ -20,13 +20,15 @@ const buildId = createHash("sha256")
   .slice(0, 16);
 for (const f of out.outputFiles) {
   const name = f.path.split("/").pop();
-  assets["/" + name] = {
+  const asset = {
     body: f.text,
     type: name.endsWith(".css") ? "text/css" : "text/javascript",
   };
+  assets["/" + name] = asset; // Compatibility for an already-open older shell.
+  assets['/assets/' + name.replace(/\.(js|css)$/, '-' + buildId + '.$1')] = asset;
 }
 assets["/"] = {
-  body: '<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#faf9f5"><title>Half an Onion · Our kitchen</title><meta name="description" content="Meals, groceries and recipes for your household."><link rel="stylesheet" href="/main.css"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/png" href="/icon-192.png"><link rel="apple-touch-icon" href="/icon-192.png"></head><body><div id="root"></div><script type="module" src="/main.js"></script></body></html>',
+  body: '<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#faf9f5"><title>Half an Onion · Our kitchen</title><meta name="description" content="Meals, groceries and recipes for your household."><link rel="stylesheet" href="/assets/main-' + buildId + '.css"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/png" href="/icon-192.png"><link rel="apple-touch-icon" href="/icon-192.png"></head><body><div id="root"></div><script type="module" src="/assets/main-' + buildId + '.js"></script></body></html>',
   type: "text/html; charset=utf-8",
 };
 for (const name of await readdir("public")) {
