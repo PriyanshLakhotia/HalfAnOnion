@@ -1,14 +1,14 @@
 # Cloud Run integration verification — 10 November 2026
 
-Current change: cold-start-safe Codex companion, streamed device sign-in, self-hosted Whisper, daily recipe proposals, weekly official-store extraction and protected Site callbacks.
+Current change: shared typed assistant contracts, validation before writes, one bounded correction attempt, and live model-to-database checks on top of the cold-start-safe Codex companion.
 
 - GitHub `main`: meaningful intermediate commits pushed; no rewritten history.
-- TypeScript check and Worker build pass. 27 domain/API tests and 7 companion tests pass, including lease fencing, interrupted-request receipts, durable limits, scheduler authorization and proposal-only writes.
+- TypeScript check and Worker build pass. 61 application/contract/API tests and 16 companion tests pass, including actual D1 saves, all assistant action types, lease fencing, interrupted-request receipts, durable limits, scheduler authorization and proposal-only writes.
 - Google project `halfanonion` and the configured workload identity were verified. The owner ran `scripts/gcp-bootstrap.sh`; runtime-service-account attachment, Cloud Run access policy, Secret Manager and Scheduler permissions were then rechecked successfully.
 - Direct bucket insertion returned `403 identity_unsupported_request` from the managed identity path. The authorized Cloud Build identity successfully created both private buckets instead. Bucket IAM and object access work normally. Metadata PATCH remains unsupported; existing bucket retention defaults are preserved.
 - Managed Sites preview attempted and failed with `relay could not open browser port 4173: timed out waiting for relay readiness`. No browser rendering/microphone/phone verification is claimed.
 - Docker image build and isolated runtime smoke checks pass. Codex starts signed out and lists `gpt-6.1-sol`; this is a catalog check, not an entitlement claim. Whisper loads offline and successfully transcribes the upstream Whisper test fixture in about five seconds. `/healthz` returns 200 and unauthenticated assistant/job calls return 401.
-- No existing Codex credential was read or reused, no OpenAI API key was created, and no live model request was made. The owner still needs to complete the dedicated sign-in in Settings → Assistant. Model availability, token refresh, real cold-start persistence and retailer extraction require live verification.
+- No authoring-machine Codex credential was copied and no OpenAI API key was created. The owner completed the dedicated sign-in. Real subscription-backed turns and model-to-database scenarios now pass, as recorded below. Long-term token refresh, scale-to-zero inference behavior and retailer extraction still require separate live verification.
 
 ## Connection repair
 
@@ -17,6 +17,16 @@ A reported Connect ChatGPT failure was traced to Cloudflare Workers rejecting `r
 31 application tests pass, including streamed device-code delivery, redirect rejection and versioned asset loading. The deployed Site-to-Cloud-Run status probe returns 200 with assistant available and transcription enabled. Direct companion device-code initiation returned the official `auth.openai.com/codex/device` URL; the test login was not authorized. Source fix: `25befcab4b7994451bb3083a3cfd3cd31824e29f`. User account authorization remains to be completed.
 
 ## Production deployment
+
+### Typed output and automatic correction
+
+The reported `recipes.origin = inference` and array `prerequisites` errors came from untyped JSON strings inside the model's action schema. `src/domain/assistant.ts` now derives structured outputs from the same Zod entity schemas used for persistence. Typed create/patch/status actions constrain enums, arrays, strings, dates and numeric bounds. Both interactive and scheduled paths accept empty-action replies. Legacy recipe origin/prerequisite representations normalize without losing their text; other invalid responses are rejected without partial writes.
+
+The companion decodes and validates each full batch against a cloned kitchen snapshot before returning it, checks references and edit expectations, and performs at most one correction within the request deadline. The Site validates again before its atomic transaction. Scheduled proposals retain their narrower authorization. Generated `companion/contract.mjs` freshness is checked before building; GitHub Actions now runs the build and both suites on pushes and pull requests. The clean-runner check for source `36934d0334486e0fa37d140aa159a8b77c23fc5e` passed: <https://github.com/PriyanshLakhotia/HalfAnOnion/actions/runs/42846930886>.
+
+Site source `c2c632d5fad10cbc56987f9f79655e6d16b19bbd` deployed successfully with environment revision 3. Cloud Run candidate `half-an-onion-companion-00005-pv4` was tested while normal traffic remained on the previous revision. `scripts/verify-assistant-live.mjs` exercised a real subscribed model through the actual Worker/API and an isolated D1 household: conversational reply (8.2 seconds), recipe/meal/shopping/pantry/preference creation (68.4 seconds, including a successful automatic correction of memory scope), typed recipe edits (9.2 seconds), and a saved recipe proposal (10.5 seconds). Assertions checked the persisted entities, not just a successful HTTP response. No test household records were written to the production Site. The live runner needs `node --use-env-proxy` in this managed environment; omitting the proxy flag caused an initial test-runner network failure before model access.
+
+The final image, source `f4274a8ca7d5bda2d43bd0d74e56ab689669da5b`, additionally keeps correction messages focused on the requested kitchen changes. Candidate revision `half-an-onion-companion-00006-792` passed a targeted real-model creation/save check in 44.7 seconds before promotion, including valid recipe origin/prerequisites, linked meal components, confirmed shopping, pantry and scoped preference records. `ONION_VERIFY_CREATION_ONLY=1` selects this narrower deployment check after the complete scenario suite has passed.
 
 ### Text-command repair
 
