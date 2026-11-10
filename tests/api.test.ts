@@ -44,6 +44,18 @@ before(async () => {
 after(async () => {
   await mf.dispose();
 });
+test('fresh navigation uses versioned assets that bypass an older service-worker cache', async () => {
+  const html = await (await req('/')).text();
+  const script = html.match(/src="(\/assets\/main-[a-f0-9]+\.js)"/)?.[1];
+  const css = html.match(/href="(\/assets\/main-[a-f0-9]+\.css)"/)?.[1];
+  assert.ok(script); assert.ok(css);
+  assert.equal((await req(script)).status, 200);
+  assert.equal((await req(css)).status, 200);
+  const worker = await (await req('/sw.js')).text();
+  assert.ok(worker.includes(script));
+  assert.ok(worker.includes(css));
+  assert.doesNotMatch(worker, /__BUILD_ID__/);
+});
 test("anonymous callers and uninvited registration cannot access household", async () => {
   assert.equal((await req("/api/state")).status, 401);
   assert.equal(

@@ -10,28 +10,37 @@ import {
   type Actor,
   type Env,
 } from "./service";
-export async function bridge(env: Env, path: string, payload: unknown = {}) {
+export async function requestBridge(
+  env: Env,
+  path: string,
+  payload: BodyInit = '{}',
+  contentType = 'application/json',
+  timeout = 20000,
+) {
   if (!env.BRIDGE_URL || !env.BRIDGE_SECRET)
-    throw new DomainError(
-      "The household assistant is not connected yet. Manual planning and shopping are ready.",
-      503,
-    );
-  const url = new URL(env.BRIDGE_URL);
-  if (url.protocol !== "https:")
-    throw new DomainError("The assistant requires a secure connection.", 503);
-  const r = await fetch(new URL(path, url), {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer " + env.BRIDGE_SECRET,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(path === "/command" ? 120000 : 20000),
-    redirect: 'error',
+    throw new DomainError('The household assistant is not connected yet. Manual planning and shopping are ready.', 503);
+  const url = new URL(path, env.BRIDGE_URL);
+  if (url.protocol !== 'https:') throw new DomainError('The assistant requires a secure connection.', 503);
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + env.BRIDGE_SECRET, 'Content-Type': contentType },
+    body: payload,
+    signal: AbortSignal.timeout(timeout),
+    // Cloudflare Workers implements follow/manual, but rejects error before I/O.
+    // Never follow a redirect carrying the private service credential.
+    redirect: 'manual',
   }).catch((error: unknown) => {
     console.error('bridge_request_failed', {path, type: error instanceof Error ? error.name : 'unknown', message: error instanceof Error ? error.message.slice(0, 250) : 'unknown'});
     throw new DomainError('Could not reach the assistant service. Try again in a moment.', 503);
   });
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel();
+    throw new DomainError('The assistant service returned an unexpected redirect. Please try again later.', 502);
+  }
+  return response;
+}
+export async function bridge(env: Env, path: string, payload: unknown = {}) {
+  const r = await requestBridge(env, path, JSON.stringify(payload), 'application/json', path === '/command' ? 120000 : 20000);
   let data: any;
   try {
     data = await r.json();
@@ -87,13 +96,7 @@ export async function aiRoute(
         403,
       );
     if (path === "/api/ai/connect") {
-      if (!env.BRIDGE_URL || !env.BRIDGE_SECRET) throw new DomainError("Companion hosting needs setup.", 503);
-      const url = new URL('/connect', env.BRIDGE_URL);
-      if (url.protocol !== 'https:') throw new DomainError('Secure assistant connection required.', 503);
-      const response = await fetch(url, {
-        method: 'POST', headers: { Authorization: 'Bearer ' + env.BRIDGE_SECRET, 'Content-Type': 'application/json' },
-        body: '{}', signal: AbortSignal.timeout(205000), redirect: 'error',
-      });
+      const response = await requestBridge(env, '/connect', '{}', 'application/json', 205000);
       return new Response(response.body, { status: response.status, headers: { 'Content-Type': response.headers.get('Content-Type') ?? 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
     }
     return json(await bridge(env, path.replace("/api/ai", "")));
@@ -199,14 +202,7 @@ export async function aiRoute(
       )
     )
       throw new DomainError("This recording format is unsupported.");
-    const url = new URL('/transcribe', env.BRIDGE_URL);
-    if (url.protocol !== 'https:') throw new DomainError('Secure voice connection required.', 503);
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + env.BRIDGE_SECRET, 'Content-Type': file.type },
-      body: await file.arrayBuffer(),
-      signal: AbortSignal.timeout(115000), redirect: 'error',
-    });
+    const r = await requestBridge(env, '/transcribe', await file.arrayBuffer(), file.type, 115000);
     if (!r.ok)
       throw new DomainError(
         r.status === 429

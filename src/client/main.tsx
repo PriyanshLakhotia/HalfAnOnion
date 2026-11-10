@@ -1661,7 +1661,7 @@ function App() {
                       <small>
                         {ai.available
                           ? "Subscription connection via Codex"
-                          : "Companion hosting needs setup"}
+                          : ai.error ?? "Companion hosting needs setup"}
                       </small>
                     </div>
                     {user.role === "owner" && (
