@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import './build-contract.mjs';
 import { build } from "esbuild";
 import { mkdir, readFile, writeFile, readdir, cp } from "node:fs/promises";
 await mkdir(".sites-runtime", { recursive: true });
