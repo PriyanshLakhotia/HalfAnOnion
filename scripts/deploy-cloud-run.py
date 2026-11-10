@@ -33,7 +33,9 @@ def call(method, url, **kwargs):
     response = session.request(method, url, timeout=120, **kwargs)
     if not response.ok:
         # Cloud errors describe permissions/resources, never dump request bodies.
-        raise RuntimeError(f'{method} {url}: {response.status_code} {response.json().get("error", {}).get("message", "request failed")}')
+        try: message = response.json().get('error', {}).get('message', 'request failed')
+        except ValueError: message = response.text[:200]
+        raise RuntimeError(f'{method} {url}: {response.status_code} {message}')
     return response.json() if response.content else {}
 
 def exists(url):
@@ -65,7 +67,7 @@ def poll_build(build_id):
     raise RuntimeError('Build remains pending: ' + build_id)
 
 def policy_binding(url, member, role, method='POST'):
-    policy = call('GET' if method == 'PUT' else 'POST', url + ('/iam' if method == 'PUT' else ':getIamPolicy'), **({} if method == 'PUT' else {'json': {}}))
+    policy = call('GET', url + ('/iam' if method == 'PUT' else ':getIamPolicy'))
     bindings = policy.setdefault('bindings', [])
     binding = next((b for b in bindings if b['role'] == role and 'condition' not in b), None)
     if binding is None:
@@ -92,7 +94,10 @@ def prepare():
         # Also apply retention rules when a previous attempt created the bucket.
         patch = {'softDeletePolicy': {'retentionDurationSeconds':'0'}}
         if lifetime: patch['lifecycle'] = {'rule':[{'action':{'type':'Delete'},'condition':{'age':lifetime}}]}
-        call('PATCH', url, json=patch)
+        try: call('PATCH', url, json=patch)
+        except RuntimeError as error:
+            if 'identity_unsupported_request' not in str(error): raise
+            print('Bucket retention unchanged: managed identity does not support metadata PATCH. Configure cleanup in Cloud Console.')
         if bucket == STATE_BUCKET:
             policy_binding(url, 'serviceAccount:' + RUNTIME, 'roles/storage.objectUser', method='PUT')
     repo = f'https://artifactregistry.googleapis.com/v1/projects/{PROJECT}/locations/{REGION}/repositories/{REPOSITORY}'
