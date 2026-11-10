@@ -108,3 +108,37 @@ test('offers use the same field limits and only supplied retailer evidence', () 
   raw.offers[0].sourceUrl = 'https://other.example/offer';
   assert.throws(() => validateModelResult(raw, context, 'offers'), /evidence/);
 });
+test('accept, dismiss, purchase, forget and remove decode into the expected domain behavior', () => {
+  for (const [action, expected] of [
+    [{ type: 'accept', kind: 'items', id: 'items-1', expectedVersion: 1 }, 'confirmed'],
+    [{ type: 'dismiss', kind: 'items', id: 'items-1', expectedVersion: 1 }, 'dismissed'],
+    [{ type: 'accept', kind: 'suggestions', id: 'suggestions-1', expectedVersion: 1, date: '2099-01-01' }, 'accepted'],
+    [{ type: 'dismiss', kind: 'suggestions', id: 'suggestions-1', expectedVersion: 1 }, 'dismissed'],
+    [{ type: 'purchase', kind: 'items', id: 'items-1', expectedVersion: 1, purchased: true }, 'purchased'],
+    [{ type: 'forget', kind: 'memories', id: 'memories-1', expectedVersion: 1 }, true],
+    [{ type: 'remove', kind: 'pantry', id: 'pantry-1', expectedVersion: 1 }, undefined],
+  ] as [any, any][]) {
+    const kitchen = structuredClone(state);
+    if (['accept', 'dismiss'].includes(action.type) && action.kind === 'items') kitchen.entities.items['items-1'].status = 'proposed';
+    const raw = packet([action]);
+    assert.ok(validWire(raw), JSON.stringify(validWire.errors));
+    const decoded = decodeAssistantOutput(raw);
+    const parsed = validateAssistantResult(decoded, kitchen, member.id, [member]);
+    const saved = applyOperation(kitchen, { id: crypto.randomUUID(), actions: parsed.actions }, member.id, [member], Date.now(), 'assistant').state;
+    const record = saved.entities[action.kind as Kind][action.id];
+    assert.equal(action.type === 'forget' ? record.forgotten : record?.status, expected);
+    if (action.type === 'accept' && action.kind === 'suggestions') assert.ok(Object.values(saved.entities.meals).some(m => m.date === action.date && m.components.some((c: any) => c.recipeId === 'recipes-1')));
+  }
+});
+test('groceries and undo use valid operation payloads and preserve domain safeguards', () => {
+  const grocery = packet([{ type: 'groceries', from: '2099-01-01', to: '2099-01-01', confirm: true }]);
+  assert.ok(validWire(grocery));
+  assert.doesNotThrow(() => validateAssistantResult(decodeAssistantOutput(grocery), state, member.id, [member]));
+  const id = crypto.randomUUID();
+  const changed = applyOperation(state, { id, actions: [{ type: 'put', kind: 'pantry', id: 'temporary', data: { name: 'Temporary' } }] }, member.id, [member], Date.now(), 'assistant').state;
+  const undo = packet([{ type: 'undo', id }]);
+  assert.ok(validWire(undo));
+  const parsed = validateAssistantResult(decodeAssistantOutput(undo), changed, member.id, [member]);
+  const restored = applyOperation(changed, { id: crypto.randomUUID(), actions: parsed.actions }, member.id, [member], Date.now(), 'assistant').state;
+  assert.equal(restored.entities.pantry.temporary, undefined);
+});
