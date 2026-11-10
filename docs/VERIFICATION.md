@@ -18,6 +18,14 @@ A reported Connect ChatGPT failure was traced to Cloudflare Workers rejecting `r
 
 ## Production deployment
 
+### Recoverable device sign-in
+
+Site source `3e5da21e059d364e9e1b5a3cfbf9bcf1fca2bb64` adds Copy code, a selectable code field with clipboard fallback, and Show sign-in code. Hiding the dialog retains the active request and code. A refreshed page can resume the pending login. Cloud Run revision `half-an-onion-companion-00003-xmm`, built from `5950cb16bc218c54761be68e998a1fe855b13013`, shares a pending device login across connection requests instead of competing for its storage lease.
+
+TypeScript, Worker build, 31 application tests and 10 companion tests pass. New tests cover reopening a closed response, identical code replay, completion delivery, expiry/retry and startup failure. Production Site publication succeeded with environment revision 3. Its served versioned JavaScript contains the new controls; both direct companion and Site-to-companion status returned 200. Two live connection requests returned 200 with the same code and expiry, without the busy error; the code was not logged. The unapproved test login then expired normally, and `/status` returned 200 with `login_pending: false`, confirming that the lease was released. Request-based CPU and zero minimum instances remain verified. Browser clipboard interaction and completed user authorization are not claimed by these checks.
+
+### Initial rollout
+
 The final Site publication uses source `4f949a9ca7b7ceb7bec6fe5aa57f5eaae41a7439` and runtime environment revision 3. Server-to-server Site callback access returned 200 for the existing household. A real Cloud Scheduler recipe invocation at 2026-11-10 14:06:20 UTC completed with OK status, exercising Scheduler OIDC, Cloud Run and Site access. Since Codex is signed out, that invocation safely skipped model generation.
 
 All five Cloud Scheduler jobs were created successfully in Europe/Amsterdam: recipes daily at 09:00; AH Friday 14:00; ALDI Wednesday 14:00; Jumbo Saturday 14:00; PLUS Saturday 14:20. A live authenticated transcription request returned 200 and the expected words from the public Whisper fixture in 13 seconds.
