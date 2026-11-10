@@ -319,6 +319,8 @@ function App() {
     ),
     [processing, setProcessing] = useState(false),
     [connecting, setConnecting] = useState(false),
+    [signIn, setSignIn] = useState<Entity | null>(null),
+    [copyMessage, setCopyMessage] = useState(""),
     [ai, setAi] = useState<any>({ connected: false, transcription: false }),
     [recording, setRecording] = useState(false),
     [transcribing, setTranscribing] = useState(false),
@@ -326,6 +328,8 @@ function App() {
     [invitations, setInvitations] = useState<any[]>([]),
     [settings, setSettings] = useState("household");
   const recorder = useRef<MediaRecorder | null>(null);
+  const connectingRef = useRef(false);
+  const codeInput = useRef<HTMLInputElement | null>(null);
   const recordTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (
@@ -438,7 +442,14 @@ function App() {
     }
   }
   async function connectAssistant() {
+    // Closing the dialog only hides it; keep the active request and code.
+    if (connectingRef.current) {
+      if (signIn) setModal({ kind: 'ai-connect' });
+      return;
+    }
+    connectingRef.current = true;
     setConnecting(true);
+    setCopyMessage('');
     try {
       if (ai.connected) { setAi({ ...ai, ...await api('/api/ai/disconnect', {}) }); return; }
       const response = await fetch('/api/ai/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(210000) });
@@ -455,15 +466,30 @@ function App() {
           if (event.auth_url) {
             const url = new URL(event.auth_url);
             if (url.protocol !== 'https:' || !['auth.openai.com','chatgpt.com'].includes(url.hostname)) throw new Error('Unexpected sign-in URL.');
-            setModal({ kind: 'ai-connect', item: { ...event, id: 'connection', version: 1, actor: user.id, updatedAt: Date.now() } });
+            setSignIn({ ...event, id: 'connection', version: 1, actor: user.id, updatedAt: Date.now() });
+            setModal({ kind: 'ai-connect' });
           }
-          if (event.connected) { connected = true; setAi({ ...event, schedules: ai.schedules }); setModal(null); k.setNotice('ChatGPT connected. Your assistant is ready.'); }
+          if (event.connected) { connected = true; setAi({ ...event, schedules: ai.schedules }); setSignIn(null); setModal(current => current?.kind === 'ai-connect' ? null : current); k.setNotice('ChatGPT connected. Your assistant is ready.'); }
         }
         if (done) break;
       }
       if (!connected) throw new Error('Sign-in did not finish. Connect ChatGPT again.');
-    } catch (error: any) { k.setError(error.message ?? 'Sign-in failed. Try again.'); }
-    finally { setConnecting(false); }
+    } catch (error: any) { setSignIn(null); k.setError(error.message ?? 'Sign-in failed. Try again.'); }
+    finally { connectingRef.current = false; setConnecting(false); }
+  }
+  async function copySignInCode() {
+    if (!signIn?.user_code) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(signIn.user_code);
+      setCopyMessage('Code copied.');
+    } catch {
+      codeInput.current?.focus();
+      codeInput.current?.select();
+      let copied = false;
+      try { copied = document.execCommand('copy'); } catch { /* Keep the code selected for manual copying. */ }
+      setCopyMessage(copied ? 'Code copied.' : 'Code selected. Use Copy on your keyboard or touch menu.');
+    }
   }
   async function voice() {
     if (recording) {
@@ -1666,10 +1692,10 @@ function App() {
                     </div>
                     {user.role === "owner" && (
                       <button
-                        disabled={connecting}
+                        disabled={connecting && !signIn}
                         onClick={connectAssistant}
                       >
-                        {connecting ? "Waiting for sign-in…" : ai.connected ? "Disconnect" : "Connect ChatGPT"}
+                        {connecting ? signIn ? "Show sign-in code" : "Starting sign-in…" : ai.connected ? "Disconnect" : ai.login_pending ? "Resume sign-in" : "Connect ChatGPT"}
                       </button>
                     )}
                   </div>
@@ -1987,31 +2013,30 @@ function App() {
             />
           ) : modal.kind === "ai-connect" ? (
             <div className="form-body">
+              {signIn ? <>
               <p>
                 Open the official sign-in page and enter this one-time code.
               </p>
-              <strong className="device-code">{modal.item?.user_code}</strong>
+              <div className="device-code-row">
+                <input ref={codeInput} className="device-code" aria-label="One-time sign-in code" readOnly value={signIn.user_code} onFocus={event => event.target.select()} />
+                <button type="button" onClick={copySignInCode}>Copy code</button>
+              </div>
+              <p className="muted" role="status" aria-live="polite">{copyMessage || 'Waiting for you to authorize in ChatGPT…'}</p>
               <a
                 className="button primary"
                 target="_blank"
                 rel="noreferrer"
-                href={modal.item?.auth_url}
+                href={signIn.auth_url}
               >
                 Continue to ChatGPT
                 <ExternalLink size={16} />
               </a>
-              <button
-                onClick={async () => {
-                  try {
-                  const status = await api("/api/ai/status");
-                  setAi(status);
-                  if (status.connected) setModal(null);
-                  else k.setError("Complete sign-in, then check again.");
-                  } catch (error: any) { k.setError(error.message); }
-                }}
-              >
-                {connecting ? "Waiting for authorization…" : "Check connection"}
-              </button>
+              <p className="muted">This code expires in a few minutes. You can close this dialog and use Show sign-in code to reopen it. After a refresh, use Resume sign-in to return to the same code.</p>
+              <button onClick={() => setModal(null)}>Hide for now</button>
+              </> : <>
+                <p>The sign-in attempt has ended. Try again to resume an active sign-in or get a new code.</p>
+                <button disabled={connecting} onClick={connectAssistant}>{connecting ? 'Starting sign-in…' : 'Try sign-in again'}</button>
+              </>}
             </div>
           ) : (
             <Editor

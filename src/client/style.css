@@ -1290,11 +1290,20 @@ summary {
   display: flex;
   gap: 4px;
 }
-.device-code {
-  display: block;
-  font-size: 32px;
-  margin: 25px 0;
-  letter-spacing: 5px;
+.device-code-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+.device-code-row .device-code {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-size: 28px;
+  letter-spacing: 3px;
+  text-align: center;
+  user-select: text;
 }
 .login {
   display: grid;
