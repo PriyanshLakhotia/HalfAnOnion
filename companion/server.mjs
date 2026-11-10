@@ -31,12 +31,17 @@ async function withRuntime(work) {
     if (active) throw new Error('The assistant is busy.');
     active = true;
     const runtime = new CodexRuntime({ home });
+    let deadline;
     try {
       await rm(home, { recursive: true, force: true });
       await mkdir(home, { recursive: true, mode: 0o700 });
       if (data.auth) await writeFile(home + '/auth.json', data.auth, { mode: 0o600 });
-      return await work(runtime, data, commit);
+      return await Promise.race([
+        work(runtime, data, commit),
+        new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error('Assistant request timed out.')), 190000); }),
+      ]);
     } finally {
+      clearTimeout(deadline);
       try {
         await runtime.stop();
         try { data.auth = await readFile(home + '/auth.json', 'utf8'); }

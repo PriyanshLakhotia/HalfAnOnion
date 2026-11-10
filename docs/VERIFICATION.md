@@ -1,3 +1,18 @@
+# Cloud Run integration verification — 10 November 2026
+
+Current change: cold-start-safe Codex companion, streamed device sign-in, self-hosted Whisper, daily recipe proposals, weekly official-store extraction and protected Site callbacks.
+
+- GitHub `main`: meaningful intermediate commits pushed; no rewritten history.
+- TypeScript check and Worker build pass. 26 domain/API tests and 7 companion tests pass, including lease fencing, interrupted-request receipts, durable limits, scheduler authorization and proposal-only writes.
+- Google project `halfanonion` and the configured workload identity were verified. Runtime/Scheduler deployment is **not complete**: `iam.serviceAccounts.actAs`, Cloud Run access-policy changes, Secret Manager and Cloud Scheduler permissions are missing. `scripts/gcp-bootstrap.sh` prepares the required identities and access.
+- A real bucket-creation attempt also returned `403 identity_unsupported_request` from the managed outbound identity path. No bucket or Cloud Run service was created by that failed request. This may require environment identity support or running the checked-in deployment script in authorized Cloud Shell after IAM setup; an IAM grant alone has not been proven to resolve it.
+- Managed Sites preview attempted and failed with `relay could not open browser port 4173: timed out waiting for relay readiness`. No browser rendering/microphone/phone verification is claimed.
+- No existing Codex credential was read or reused, no OpenAI API key was created, and no live model request was made. The owner still needs to complete the dedicated sign-in after hosting is available. Model availability, token refresh, real cold-start persistence and retailer extraction require live verification.
+
+The earlier release record below is historical; its intentionally disconnected hosting and paid transcription descriptions are superseded by this change.
+
+---
+
 # Verification record — 9 November 2026
 
 ## Proven in this environment

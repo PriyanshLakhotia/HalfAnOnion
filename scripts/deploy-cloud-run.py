@@ -52,6 +52,18 @@ def poll(url, label):
         time.sleep(10)
     raise RuntimeError(label + ' is still pending; inspect the existing operation before retrying')
 
+def poll_build(build_id):
+    url = f'https://cloudbuild.googleapis.com/v1/projects/{PROJECT}/locations/{REGION}/builds/{build_id}'
+    for _ in range(160):
+        result = call('GET', url)
+        status = result['status']
+        if status == 'SUCCESS': return result
+        if status not in ['QUEUED', 'WORKING', 'PENDING']:
+            raise RuntimeError('Build ' + status + ': ' + json.dumps(result.get('failureInfo', {})))
+        print('Build ' + status, flush=True)
+        time.sleep(10)
+    raise RuntimeError('Build remains pending: ' + build_id)
+
 def policy_binding(url, member, role, method='POST'):
     policy = call('GET' if method == 'PUT' else 'POST', url + ('/iam' if method == 'PUT' else ':getIamPolicy'), **({} if method == 'PUT' else {'json': {}}))
     bindings = policy.setdefault('bindings', [])
@@ -67,7 +79,20 @@ def prepare():
         if not exists(url):
             settings = {'name': bucket, 'location': REGION, 'iamConfiguration': {'uniformBucketLevelAccess': {'enabled': True}, 'publicAccessPrevention': 'enforced'}, 'softDeletePolicy': {'retentionDurationSeconds': '0'}}
             if lifetime: settings['lifecycle'] = {'rule': [{'action': {'type': 'Delete'}, 'condition': {'age': lifetime}}]}
-            call('POST', 'https://storage.googleapis.com/storage/v1/b', params={'project': PROJECT}, json=settings)
+            try:
+                call('POST', 'https://storage.googleapis.com/storage/v1/b', params={'project': PROJECT}, json=settings)
+            except RuntimeError as error:
+                if 'identity_unsupported_request' not in str(error): raise
+                # Managed workload identity does not implement bucket insertion.
+                # Use the already authorized Cloud Build identity for this operation.
+                op = call('POST', f'https://cloudbuild.googleapis.com/v1/projects/{PROJECT}/locations/{REGION}/builds', json={
+                    'steps': [{'name':'gcr.io/google.com/cloudsdktool/google-cloud-cli:stable', 'entrypoint':'gcloud', 'args':['storage','buckets','create','gs://'+bucket,'--project='+PROJECT,'--location='+REGION,'--uniform-bucket-level-access','--public-access-prevention']}],
+                    'serviceAccount':f'projects/{PROJECT}/serviceAccounts/{BUILDER}', 'options':{'logging':'CLOUD_LOGGING_ONLY'}, 'timeout':'300s'})
+                poll_build(op['metadata']['build']['id'])
+        # Also apply retention rules when a previous attempt created the bucket.
+        patch = {'softDeletePolicy': {'retentionDurationSeconds':'0'}}
+        if lifetime: patch['lifecycle'] = {'rule':[{'action':{'type':'Delete'},'condition':{'age':lifetime}}]}
+        call('PATCH', url, json=patch)
         if bucket == STATE_BUCKET:
             policy_binding(url, 'serviceAccount:' + RUNTIME, 'roles/storage.objectUser', method='PUT')
     repo = f'https://artifactregistry.googleapis.com/v1/projects/{PROJECT}/locations/{REGION}/repositories/{REPOSITORY}'
@@ -103,7 +128,7 @@ def build():
         'options': {'logging':'CLOUD_LOGGING_ONLY'},
     })
     print(json.dumps({'build_operation':op['name'],'image':image}),flush=True)
-    poll('https://cloudbuild.googleapis.com/v1/' + op['name'], 'Build')
+    poll_build(op['metadata']['build']['id'])
     print('Image built: ' + image)
 
 def deploy():

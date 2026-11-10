@@ -27,6 +27,7 @@ export async function bridge(env: Env, path: string, payload: unknown = {}) {
     },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(path === "/command" ? 120000 : 20000),
+    redirect: 'error',
   });
   let data: any;
   try {

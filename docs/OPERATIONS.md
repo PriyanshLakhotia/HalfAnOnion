@@ -15,18 +15,16 @@ The owner bootstrap email is stored as a server secret. It is not used for accou
 - iPhone: open in Safari → Share → Add to Home Screen.
 - Android: open in Chrome → menu → Install app/Add to Home Screen.
 - Sign in online once before shopping offline. A small status indicator reports queued changes. Keep the app open briefly after reconnecting until it says up to date. A conflicting change stays visible with a discard control.
-- Microphone permission is requested only on deliberate tap after transcription is configured. Tap again to stop, review/correct the transcript and submit. Recording ends after 60 seconds. Browser speech recognition is not used as the sole transcription path.
+- Microphone permission is requested only on deliberate tap after the companion is configured. Tap again to stop, review/correct the transcript and submit. Recording ends after 60 seconds. Browser speech recognition is not used as the sole transcription path.
 - Close all app windows and reopen to activate a downloaded update. Signing out clears the local household copy and warns if unsynced changes would be discarded.
 
 Phone installation, on-screen keyboard, actual offline replay and microphone behavior require physical Android/iPhone checks. Desktop Chromium was unavailable in this environment; screenshots have not been visually reviewed.
 
-## Connect the household AI later
+## Connect the household AI
 
-See [companion setup](../companion/README.md). Hosting was explicitly left disconnected. Do not copy Lens or desktop authentication files. Deploy an isolated companion with persistent private storage, TLS and `BRIDGE_SECRET`. Configure matching `BRIDGE_URL`/`BRIDGE_SECRET` as Sites runtime secrets and redeploy the saved version. Only the owner then uses Settings → Assistant → Connect ChatGPT. Complete the official device-code ceremony. The companion persists and refreshes its own session; no other member receives the provider token.
+See [Cloud Run companion setup](../companion/README.md). Once deployment access is ready, the existing Settings → Assistant screen starts official device-code sign-in and streams completion. The owner must complete that authorization. The dedicated login survives Cloud Run cold starts in private, generation-fenced storage. No authoring or Lens credentials are copied.
 
-Choose a catalog model and applicable thinking level. The requested default is `gpt-6.1-sol`, high. Run a completed test request before claiming entitlement. A failed/revoked connection leaves manual functions available. No API reasoning fallback or paid reasoning key path is implemented.
-
-Voice is a separate optional connection. Use the OpenAI Developers plugin's secure key workflow to configure `OPENAI_API_KEY` as a Site secret; do not paste keys in chat or the app. Transcription has separate API charges. No key is currently configured.
+Voice uses self-hosted Whisper on the same request-based service, without an API key. Review the transcript before submitting; Hindi/Hinglish and mobile formats still need acceptance testing. Scheduler posts daily recipes and weekly retailer jobs to the companion. New recommendations remain proposals and do not overwrite plans. The UI only reports schedules configured after actual Scheduler creation.
 
 ## Memory
 
@@ -50,6 +48,6 @@ Site access must permit the username/password sign-in shell without a ChatGPT lo
 
 ## Costs and monitoring
 
-No additional hosting was provisioned. The companion has no current hosting bill because it is not running. A future host must be approved within the €5/month ceiling; a container definition is not a price guarantee. Reusing a personal computer requires it to stay awake and is not an always-available deployment. The companion caps commands at 30/day in memory and each turn at 100 seconds; infrastructure billing limits must still be enforced separately, especially across restarts. Transcription usage is separately billed and bounded in D1. No email delivery service is used.
+Cloud Run is configured for zero minimum instances and request-based billing. The maximum instance count and durable 30/day AI attempt guard bound usage, but are not a hard monthly cost ceiling. Review actual Cloud Billing; storage, builds, registry and Scheduler may incur charges even with idle compute at zero. See the verification record for deployment status.
 
 The UI reports source failures separately from empty offers. The server logs only route and error class, not request bodies or tokens. Check Site Worker logs for HTTP failures, D1 tables for persisted household state and the app's offer-source panel for last collection status. Do not claim scheduler health from a local invocation alone.

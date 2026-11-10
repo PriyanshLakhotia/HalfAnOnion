@@ -25,4 +25,4 @@ Sources:
 - https://plus-consumentenservice.custhelp.com/app/answers/detail/a_id/1275/related/1
 - https://plus-consumentenservice.custhelp.com/app/answers/detail/a_id/336
 
-Scheduling requires a created household, selected stores and a connected writer. The initial empty household has none selected. Native scheduled jobs must be verified from a fresh cloud task; a saved schedule alone is not a successful production collection. See the final verification record for actual deployment/schedule state.
+The Cloud Run companion now provides authenticated weekly Scheduler endpoints and direct server-to-server Site callbacks, in addition to MCP. It retrieves only allowlisted official pages and marks blocked/unreadable campaigns unavailable. Scheduling requires a created household, selected stores, a connected companion and configured service access. The initial empty household has none selected. Native scheduled jobs must be verified from a fresh cloud task; a saved schedule alone is not a successful production collection. See the final verification record for actual deployment/schedule state.

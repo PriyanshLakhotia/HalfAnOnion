@@ -12,6 +12,7 @@ export class CodexRuntime {
     this.tail = Promise.resolve();
   }
   async start() {
+    if (this.closed) throw new Error('Assistant request has ended.');
     if (this.process) return;
     if (this.starting) return this.starting;
     this.starting = this._start();
@@ -136,6 +137,7 @@ export class CodexRuntime {
     this.write({ method: "initialized" });
   }
   async stop() {
+    this.closed = true;
     const child = this.process;
     if (!child) return;
     await new Promise(resolve => {
@@ -274,6 +276,7 @@ export class CodexRuntime {
         reject(new Error("Instruction timed out; no changes were applied."));
       }, 100000);
     });
+    completion.catch(() => {}); // turn/start can fail before this promise is awaited.
     try {
       const turn = await this.rpc("turn/start", {
         threadId,
