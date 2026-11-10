@@ -128,9 +128,9 @@ def build():
     image = f'{REGION}-docker.pkg.dev/{PROJECT}/{REPOSITORY}/companion:{sha}'
     op = call('POST', f'https://cloudbuild.googleapis.com/v1/projects/{PROJECT}/locations/{REGION}/builds', json={
         'source': {'storageSource': {'bucket': BUILD_BUCKET, 'object': obj}},
-        'steps': [{'name': 'gcr.io/cloud-builders/docker', 'args': ['build','-t',image,'.']}],
+        'steps': [{'name': 'gcr.io/cloud-builders/docker', 'env': ['DOCKER_BUILDKIT=1'], 'args': ['build','-t',image,'.']}],
         'images': [image], 'timeout': '1200s', 'serviceAccount': f'projects/{PROJECT}/serviceAccounts/{BUILDER}',
-        'options': {'logging':'CLOUD_LOGGING_ONLY'},
+        'logsBucket': 'gs://' + BUILD_BUCKET + '/build-logs', 'options': {'logging':'GCS_ONLY'},
     })
     print(json.dumps({'build_operation':op['name'],'image':image}),flush=True)
     poll_build(op['metadata']['build']['id'])
@@ -138,7 +138,8 @@ def build():
 
 def deploy():
     import subprocess
-    sha = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+    sha = os.environ.get('ONION_IMAGE_COMMIT') or subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+    if len(sha) != 40 or any(c not in '0123456789abcdef' for c in sha): raise RuntimeError('Image commit must be a full SHA')
     url = f'https://run.googleapis.com/v2/projects/{PROJECT}/locations/{REGION}/services/{SERVICE}'
     env = [{'name':'STATE_BUCKET','value':STATE_BUCKET}, {'name':'SITE_URL','value':SITE}, {'name':'SCHEDULER_EMAIL','value':SCHEDULER}]
     for name, secret in [('BRIDGE_SECRET','onion-bridge-secret'),('SITE_ACCESS_TOKEN','onion-site-access')]:
