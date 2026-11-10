@@ -3,11 +3,18 @@
 Current change: cold-start-safe Codex companion, streamed device sign-in, self-hosted Whisper, daily recipe proposals, weekly official-store extraction and protected Site callbacks.
 
 - GitHub `main`: meaningful intermediate commits pushed; no rewritten history.
-- TypeScript check and Worker build pass. 26 domain/API tests and 7 companion tests pass, including lease fencing, interrupted-request receipts, durable limits, scheduler authorization and proposal-only writes.
-- Google project `halfanonion` and the configured workload identity were verified. Runtime/Scheduler deployment is **not complete**: `iam.serviceAccounts.actAs`, Cloud Run access-policy changes, Secret Manager and Cloud Scheduler permissions are missing. `scripts/gcp-bootstrap.sh` prepares the required identities and access.
-- A real bucket-creation attempt also returned `403 identity_unsupported_request` from the managed outbound identity path. No bucket or Cloud Run service was created by that failed request. This may require environment identity support or running the checked-in deployment script in authorized Cloud Shell after IAM setup; an IAM grant alone has not been proven to resolve it.
+- TypeScript check and Worker build pass. 27 domain/API tests and 7 companion tests pass, including lease fencing, interrupted-request receipts, durable limits, scheduler authorization and proposal-only writes.
+- Google project `halfanonion` and the configured workload identity were verified. The owner ran `scripts/gcp-bootstrap.sh`; runtime-service-account attachment, Cloud Run access policy, Secret Manager and Scheduler permissions were then rechecked successfully.
+- Direct bucket insertion returned `403 identity_unsupported_request` from the managed identity path. The authorized Cloud Build identity successfully created both private buckets instead. Bucket IAM and object access work normally. Metadata PATCH remains unsupported; existing bucket retention defaults are preserved.
 - Managed Sites preview attempted and failed with `relay could not open browser port 4173: timed out waiting for relay readiness`. No browser rendering/microphone/phone verification is claimed.
-- No existing Codex credential was read or reused, no OpenAI API key was created, and no live model request was made. The owner still needs to complete the dedicated sign-in after hosting is available. Model availability, token refresh, real cold-start persistence and retailer extraction require live verification.
+- Docker image build and isolated runtime smoke checks pass. Codex starts signed out and lists `gpt-6.1-sol`; this is a catalog check, not an entitlement claim. Whisper loads offline and successfully transcribes the upstream Whisper test fixture in about five seconds. `/healthz` returns 200 and unauthenticated assistant/job calls return 401.
+- No existing Codex credential was read or reused, no OpenAI API key was created, and no live model request was made. The owner still needs to complete the dedicated sign-in in Settings → Assistant. Model availability, token refresh, real cold-start persistence and retailer extraction require live verification.
+
+## Production deployment
+
+All five Cloud Scheduler jobs were created successfully in Europe/Amsterdam: recipes daily at 09:00; AH Friday 14:00; ALDI Wednesday 14:00; Jumbo Saturday 14:00; PLUS Saturday 14:20. A live authenticated transcription request returned 200 and the expected words from the public Whisper fixture in 13 seconds.
+
+Cloud Run: `https://half-an-onion-companion-mhkhubkfza-ez.a.run.app`, revision `half-an-onion-companion-00002-s4k`, image source `7f6f56fa2734ca8f0ca4487a9d3ae116c7c68bab`. Request-based CPU billing is enabled (`cpuIdle: true`), minimum instances zero and maximum one. A signed-out authenticated `/status` request completed in about five seconds, returned the requested model in its catalog and reported the local voice adapter ready. Anonymous `/command` returned 401. The local container startup probe returned 200; the externally requested Cloud Run `/healthz` returned 404, so readiness is verified using Cloud Run's Ready condition and authenticated application requests.
 
 The earlier release record below is historical; its intentionally disconnected hosting and paid transcription descriptions are superseded by this change.
 

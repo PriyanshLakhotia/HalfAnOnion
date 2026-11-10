@@ -15,6 +15,6 @@ npm run build
 npm test
 ```
 
-The React client and request-based Worker deploy to ChatGPT Sites. D1 is the shared source of truth. IndexedDB stores device caches and retryable changes; it is not the shared database. The companion is prepared for request-based Cloud Run with zero minimum instances; deployment is currently blocked by cloud access setup. Manual food management does not depend on it.
+The React client and request-based Worker deploy to ChatGPT Sites. D1 is the shared source of truth. IndexedDB stores device caches and retryable changes; it is not the shared database. The companion is prepared for request-based Cloud Run with zero minimum instances; it is deployed in `halfanonion` / `europe-west4`. Connect a dedicated ChatGPT session in Settings → Assistant. Manual food management does not depend on it.
 
 The default requested model is `gpt-6.1-sol` with `high` reasoning. No paid API reasoning fallback exists. Voice uses a self-hosted multilingual Whisper model in the companion; it does not need an OpenAI API key.
