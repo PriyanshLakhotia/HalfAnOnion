@@ -18,6 +18,12 @@ A reported Connect ChatGPT failure was traced to Cloudflare Workers rejecting `r
 
 ## Production deployment
 
+### Text-command repair
+
+The runtime constructor assigned the executable string to `this.command`, shadowing the `command()` method used by text input and scheduled jobs. It now stores the executable in `this.executable`. Three regression tests reproduced `runtime.command is not a function` before the fix and pass afterward, exercising public command dispatch, structured turn results and recovery after a signed-out rejection. All 13 companion tests and syntax checks pass.
+
+Image source `9445a72986d834084df47dee3cdb8924b3f603e2` is deployed as Cloud Run revision `half-an-onion-companion-00004-bjk`. The existing ChatGPT account remained connected. A real authenticated `/command` request using `gpt-6.1-sol` with high reasoning returned HTTP 200 and `status: completed` in 6.8 seconds, with message `Text commands are working.` and zero actions. This verifies an actual subscribed model turn without modifying household records. Cloud Run is Ready, still uses request-based CPU, and still has zero minimum instances. Both fix and verification commits are pushed to GitHub `main`.
+
 ### Recoverable device sign-in
 
 Site source `3e5da21e059d364e9e1b5a3cfbf9bcf1fca2bb64` adds Copy code, a selectable code field with clipboard fallback, and Show sign-in code. Hiding the dialog retains the active request and code. A refreshed page can resume the pending login. Cloud Run revision `half-an-onion-companion-00003-xmm`, built from `5950cb16bc218c54761be68e998a1fe855b13013`, shares a pending device login across connection requests instead of competing for its storage lease.
