@@ -154,6 +154,14 @@ def deploy():
     if present:
         old = call('GET',url)
         env.append({'name':'SERVICE_URL','value':old['uri']})
+    if os.environ.get('ONION_CANARY') == '1':
+        if not present: raise RuntimeError('Canary deployment needs an existing service')
+        live = [t for t in old.get('trafficStatuses', []) if t.get('percent', 0) > 0]
+        if not live: raise RuntimeError('Could not identify current serving traffic')
+        payload['traffic'] = [{'type':'TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION', 'revision':t['revision'].split('/')[-1], 'percent':t['percent']} for t in live]
+        payload['traffic'].append({'type':'TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST', 'tag':'candidate', 'percent':0})
+    else:
+        payload['traffic'] = [{'type':'TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST', 'percent':100}]
     op = call('PATCH' if present else 'POST', url if present else url.rsplit('/',1)[0], params={} if present else {'serviceId':SERVICE}, json=payload)
     service = poll('https://run.googleapis.com/v2/' + op['name'], 'Cloud Run')
     # Anonymous platform ingress is necessary for the Sites server's bearer credential.
@@ -163,7 +171,20 @@ def deploy():
         env.append({'name':'SERVICE_URL','value':service['uri']})
         op = call('PATCH',url,params={'updateMask':'template.containers'},json={'template':{'containers':payload['template']['containers']}})
         service = poll('https://run.googleapis.com/v2/' + op['name'], 'Service audience')
-    print(json.dumps({'service_url':service['uri'],'revision':service.get('latestReadyRevision')}))
+    print(json.dumps({'service_url':service['uri'],'revision':service.get('latestReadyRevision'), 'traffic':service.get('trafficStatuses')}))
+
+def promote():
+    url = f'https://run.googleapis.com/v2/projects/{PROJECT}/locations/{REGION}/services/{SERVICE}'
+    service = call('GET',url)
+    sha = os.environ.get('ONION_IMAGE_COMMIT')
+    if not sha or not service['template']['containers'][0]['image'].endswith(':'+sha):
+        raise RuntimeError('Set ONION_IMAGE_COMMIT to the verified candidate image before promotion')
+    candidate = next((t for t in service.get('trafficStatuses',[]) if t.get('tag') == 'candidate'), None)
+    if not candidate or candidate['revision'].split('/')[-1] != service['latestReadyRevision'].split('/')[-1]:
+        raise RuntimeError('The candidate revision is not ready for promotion')
+    op = call('PATCH',url,params={'updateMask':'traffic'},json={'traffic':[{'type':'TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION','revision':candidate['revision'].split('/')[-1],'percent':100}]})
+    ready = poll('https://run.googleapis.com/v2/' + op['name'], 'Promote verified candidate')
+    print(json.dumps({'service_url':ready['uri'],'traffic':ready.get('trafficStatuses')}))
 
 def schedules():
     service = call('GET',f'https://run.googleapis.com/v2/projects/{PROJECT}/locations/{REGION}/services/{SERVICE}')
@@ -187,5 +208,5 @@ def verify():
     print('Verified request-based CPU and zero minimum instances.')
 
 if __name__ == '__main__':
-    parser=argparse.ArgumentParser(); parser.add_argument('phase', choices=['prepare','build','deploy','schedules','verify'])
+    parser=argparse.ArgumentParser(); parser.add_argument('phase', choices=['prepare','build','deploy','promote','schedules','verify'])
     globals()[parser.parse_args().phase]()
