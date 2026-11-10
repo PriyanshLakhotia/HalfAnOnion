@@ -4,7 +4,7 @@ import { mkdir } from "node:fs/promises";
 export class CodexRuntime {
   constructor({ home = process.env.CODEX_HOME, command = "codex" } = {}) {
     this.home = home;
-    this.command = command;
+    this.executable = command;
     this.pending = new Map();
     this.sequence = 0;
     this.active = null;
@@ -43,7 +43,7 @@ export class CodexRuntime {
         .map((k) => [k, process.env[k]]),
     );
     this.process = spawn(
-      this.command,
+      this.executable,
       [
         "app-server",
         "--listen",
