@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Miniflare } from 'miniflare';
 import { readFile, readdir } from 'node:fs/promises';
 
-let mf: Miniflare, cookie = '', ownerId = '', output: any, lastContext: any;
+let mf: Miniflare, cookie = '', ownerId = '', output: any, lastContext: any, lastCapture: any, companionCalls = 0;
 const origin = 'https://assistant-kitchen.test';
 const key = 'test-assistant-bridge-secret';
 async function req(path: string, data?: unknown, scheduled = false) {
@@ -25,9 +25,11 @@ before(async () => {
   mf = new Miniflare({ modules: true, scriptPath: 'dist/server/index.js', compatibilityDate: '2026-05-15', cf: false,
     d1Databases: ['DB'], bindings: { BOOTSTRAP_OWNER_EMAIL: 'owner@test.invalid', BRIDGE_SECRET: key, BRIDGE_URL: 'https://companion.test' },
     outboundService: async (request) => {
-      assert.equal(new URL(request.url).pathname, '/command');
+      assert.ok(['/command', '/recipe'].includes(new URL(request.url).pathname));
+      companionCalls++;
       assert.equal(request.headers.get('Authorization'), 'Bearer ' + key);
-      lastContext = (await request.json() as any).context;
+      lastCapture = await request.json() as any;
+      lastContext = lastCapture.context;
       return new Response(JSON.stringify({ status: 'completed', result: output }), { headers: { 'Content-Type': 'application/json' } });
     },
   });
@@ -106,4 +108,45 @@ test('scheduled follow-ups can contain no actions; legacy recipes normalize on t
   const response = await req('/internal/jobs/recipes', { id: crypto.randomUUID(), ...result }, true);
   assert.equal(response.status, 200, await response.clone().text());
   assert.equal((await state()).entities.recipes['scheduled-dal'].prerequisites, 'Soak lentils');
+});
+
+const capturePhoto = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6QFEAAAAASUVORK5CYII=';
+test('photo-only capture forwards ordered photos and saves exactly one recipe; retry does not call the model again', async () => {
+  const id = crypto.randomUUID();
+  output = packet([{ type: 'put', kind: 'recipes', id: 'captured-soup', data: { name: 'Tomato soup', ingredients: [{ name: 'Tomato', quantity: 250, unit: 'g' }], steps: ['Simmer.'] } }]);
+  const before = await state();
+  const r = await req('/api/ai/recipe', { id, images: [capturePhoto, capturePhoto] });
+  assert.equal(r.status, 200, await r.clone().text());
+  const result = await r.json() as any;
+  assert.equal(result.completed, true); assert.equal(result.recipe.name, 'Tomato soup');
+  assert.equal(lastCapture.text, ''); assert.deepEqual(lastCapture.images, [capturePhoto, capturePhoto]);
+  const after = await state();
+  assert.equal(Object.keys(after.entities.recipes).length, Object.keys(before.entities.recipes).length + 1);
+  assert.deepEqual(after.entities.meals, before.entities.meals);
+  assert.ok(!JSON.stringify(after).includes('data:image'));
+  const calls = companionCalls;
+  const replay = await req('/api/ai/recipe', { id, images: [capturePhoto, capturePhoto] });
+  assert.equal(replay.status, 200); assert.equal(companionCalls, calls);
+  assert.deepEqual(await state(), after);
+});
+test('capture follow-ups and unrelated model actions cannot write household records', async () => {
+  const before = await state();
+  output = { ...packet(), followUp: true, message: 'Which dish is this?' };
+  let r = await req('/api/ai/recipe', { id: crypto.randomUUID(), text: 'An unreadable recipe' });
+  assert.equal(r.status, 200); assert.equal((await r.json() as any).completed, false);
+  output = packet([{ type: 'put', kind: 'recipes', id: 'blocked-capture', data: { name: 'Soup' } }, { type: 'put', kind: 'items', id: 'unwanted-grocery', data: { name: 'Tomato' } }]);
+  r = await req('/api/ai/recipe', { id: crypto.randomUUID(), text: 'Tomato soup' });
+  assert.equal(r.status, 502); assert.deepEqual(await state(), before);
+});
+test('empty or external-image capture fails before model access; photo payloads can exceed the ordinary text limit', async () => {
+  const calls = companionCalls;
+  for (const input of [{}, { images: ['https://example.com/recipe.png'] }]) {
+    const r = await req('/api/ai/recipe', { id: crypto.randomUUID(), ...input }); assert.equal(r.status, 400);
+  }
+  assert.equal(companionCalls, calls);
+  const large = 'data:image/png;base64,' + Buffer.concat([Buffer.from(capturePhoto.split(',')[1], 'base64'), Buffer.alloc(260000)]).toString('base64');
+  output = packet([{ type: 'put', kind: 'recipes', id: 'large-capture', data: { name: 'Large photo recipe' } }]);
+  const r = await req('/api/ai/recipe', { id: crypto.randomUUID(), images: [large] });
+  assert.equal(r.status, 200, await r.clone().text());
+  assert.ok(lastCapture.images[0].length > 250000);
 });

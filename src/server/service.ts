@@ -55,10 +55,23 @@ export function json(
     },
   });
 }
-export async function body(request: Request) {
-  const raw = await request.text();
-  if (raw.length > 250000)
+export async function body(request: Request, maximum = 250000) {
+  if (Number(request.headers.get('Content-Length')) > maximum)
     throw new DomainError("This request is too large.", 413);
+  const reader = request.body?.getReader(), decoder = new TextDecoder();
+  let raw = '', size = 0;
+  if (reader) {
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > maximum) { await reader.cancel(); throw new DomainError("This request is too large.", 413); }
+        raw += decoder.decode(value, { stream: true });
+      }
+      raw += decoder.decode();
+    } finally { reader.releaseLock(); }
+  }
   try {
     return JSON.parse(raw);
   } catch {

@@ -50,7 +50,7 @@ export async function api<T = any>(path: string, data?: any): Promise<T> {
     credentials: "same-origin",
     headers: data === undefined ? {} : { "Content-Type": "application/json" },
     ...(data === undefined ? {} : { body: JSON.stringify(data) }),
-    signal: AbortSignal.timeout(path === "/api/ai/command" ? 195000 : 30000),
+    signal: AbortSignal.timeout((path === "/api/ai/command" || path === "/api/ai/recipe") ? 195000 : 30000),
   });
   const result: any = await response.json();
   if (!response.ok)

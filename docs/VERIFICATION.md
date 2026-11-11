@@ -1,5 +1,13 @@
 # Cloud Run integration verification — 10 November 2026
 
+## Recipe capture and suggestion cleanup — 11 November 2026
+
+The live household contained three proposals saved on 10 November at 16:55 Amsterdam time and the same recipe IDs proposed again by the 11 November 09:00 job. Current proposals now display once, new assistant proposals are deduplicated by recipe/name and participants, and accepting/dismissing a displayed card resolves its existing duplicates atomically. No production data cleanup was needed. All five Scheduler jobs were inspected as enabled; offer jobs will skip this household until a retailer store has discovery enabled.
+
+The new first recipe tab accepts photos, free text or voice and saves one structured recipe through the existing subscribed companion. Manual entry remains in the second tab. Meal time and total-servings inputs are removed, with existing saved values preserved. Settings → Assistant shows next scheduled runs using the same schedule declarations as deployment.
+
+Local validation: 74 application tests and 18 companion tests passed, along with TypeScript/contract checks and the production build. Browser QA remains blocked by the computer-use runtime initialization error. The candidate's live image/text/voice verification is recorded separately after deployment testing.
+
 ## UI simplification — 10 November 2026
 
 Page headings now contain only their title. The normal sync/slogan bar, navigation icons, empty inspiration panel, decorative recipe covers, and repeated empty-state instructions have been removed. Shopping, recipes, pantry, settings, sign-in, and the assistant composer use shorter labels, neutral surfaces, and readable supporting text. Offline/pending-sync notices, error messages, and functional icon controls remain available.

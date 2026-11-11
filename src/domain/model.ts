@@ -253,6 +253,21 @@ export class DomainError extends Error {
 }
 export const normalize = (v: string) =>
   v.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+export function sameSuggestion(a: Record<string, any>, b: Record<string, any>) {
+  return (a.recipeId === b.recipeId || normalize(a.name) === normalize(b.name)) &&
+    JSON.stringify([...a.participants].sort()) === JSON.stringify([...b.participants].sort());
+}
+export function pendingSuggestions(records: Record<string, Entity>, date = today()) {
+  const current = Object.values(records).filter(s => s.expiresOn >= date);
+  const result: Entity[] = [];
+  for (const suggestion of current.sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id))) {
+    if (suggestion.status !== 'proposed' ||
+        current.some(s => ['accepted', 'dismissed'].includes(s.status) && sameSuggestion(s, suggestion)) ||
+        result.some(s => sameSuggestion(s, suggestion))) continue;
+    result.push(suggestion);
+  }
+  return result;
+}
 export const matchKey = (v: any) =>
   [v.name, v.brand, v.variant, v.storeId ?? "any", v.unit]
     .map((x) => normalize(x ?? ""))
@@ -551,6 +566,11 @@ export function applyOperation(
     if (a.type === "put") {
       if (old) throw new DomainError("That record already exists.", 409);
       const v = validate(kind, a.data);
+      // Different daily runs use different IDs. Keep the existing decision or
+      // proposal while it is current, including duplicates within one batch.
+      if (kind === 'suggestions' && source === 'assistant' && v.status === 'proposed' &&
+          Object.values(state.entities.suggestions).some(s => s.expiresOn >= currentDate &&
+            s.status !== 'expired' && sameSuggestion(s, v))) continue;
       if (kind === "items" && source === "manual") {
         v.status = "confirmed";
         v.origin = "manual";
@@ -660,6 +680,12 @@ export function applyOperation(
                 ? "confirmed"
                 : "accepted",
         });
+        if (kind === 'suggestions') {
+          for (const duplicate of Object.values(state.entities.suggestions)) {
+            if (duplicate.id !== id && duplicate.status === 'proposed' && duplicate.expiresOn >= currentDate && sameSuggestion(duplicate, old))
+              save('suggestions', duplicate.id, { ...duplicate, status: a.type === 'accept' ? 'accepted' : 'dismissed' });
+          }
+        }
       }
       if (a.type === "purchase") {
         if (

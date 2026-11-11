@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { recipeCaptureSchema, MAX_RECIPE_REQUEST_BYTES } from "../domain/recipe-capture";
 import { DomainError, today } from "../domain/model";
-import { parseAssistantResult, assistantValidationIssues, INVALID_ASSISTANT_OUTPUT } from '../domain/assistant';
+import { parseAssistantResult, validateAssistantResult, assistantValidationIssues, INVALID_ASSISTANT_OUTPUT } from '../domain/assistant';
 import {
   body,
   json,
@@ -41,7 +42,7 @@ export async function requestBridge(
   return response;
 }
 export async function bridge(env: Env, path: string, payload: unknown = {}) {
-  const r = await requestBridge(env, path, JSON.stringify(payload), 'application/json', path === '/command' ? 185000 : 20000);
+  const r = await requestBridge(env, path, JSON.stringify(payload), 'application/json', ['/command', '/recipe'].includes(path) ? 185000 : 20000);
   let data: any;
   try {
     data = await r.json();
@@ -73,6 +74,7 @@ export async function aiRoute(
         transcription: false,
         model: snap.state.model,
         reasoning: snap.state.reasoning,
+        schedules: env.SCHEDULES_CONFIGURED === "true",
       });
     try {
       return json({
@@ -84,6 +86,7 @@ export async function aiRoute(
         connected: false,
         available: false,
         transcription: false,
+        schedules: env.SCHEDULES_CONFIGURED === "true",
         error: e.message,
       });
     }
@@ -101,6 +104,30 @@ export async function aiRoute(
       return new Response(response.body, { status: response.status, headers: { 'Content-Type': response.headers.get('Content-Type') ?? 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
     }
     return json(await bridge(env, path.replace("/api/ai", "")));
+  }
+  if (path === "/api/ai/recipe") {
+    const input = recipeCaptureSchema.parse(await body(request, MAX_RECIPE_REQUEST_BYTES));
+    const snap = await snapshot(env, actor);
+    const receipt = await env.DB.prepare('SELECT actor FROM receipts WHERE id=? AND household_id=?').bind(input.id, actor.household_id).first();
+    if (receipt) {
+      if (receipt.actor !== actor.id) throw new DomainError('This request belongs to another household member.', 409);
+      const saved = snap.state.activity.find(a => a.id === input.id)?.changes.find(c => c.kind === 'recipes' && !c.before)?.id;
+      return json({ completed: true, message: 'Recipe saved.', recipe: saved ? snap.state.entities.recipes[saved] ?? null : null });
+    }
+    await limit(env.DB, 'agent:' + actor.household_id, 30, 86400000);
+    const result = await bridge(env, '/recipe', {
+      ...input, model: snap.state.model, reasoning: snap.state.reasoning,
+      context: { today: today(), timezone: 'Europe/Amsterdam', speaker: actor.id, members: snap.members,
+        entities: snap.state.entities },
+    });
+    if (result.status !== 'completed') throw new DomainError('Recipe capture did not finish. Your input is still here; try again.', 502);
+    let parsed;
+    try { parsed = validateAssistantResult(result.result, snap.state, actor.id, snap.members, 'recipe-capture'); }
+    catch (error) { throw new DomainError('The assistant could not prepare a valid recipe. Nothing was saved. Try again.', 502); }
+    if (parsed.followUp || !parsed.actions.length) return json({ completed: false, message: parsed.message });
+    await mutate(env, actor, { id: input.id, actions: parsed.actions }, 'assistant');
+    const saved = await snapshot(env, actor);
+    return json({ completed: true, message: 'Recipe saved.', recipe: saved.state.entities.recipes[parsed.actions[0].id!] });
   }
   if (path === "/api/ai/command") {
     const input = z

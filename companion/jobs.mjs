@@ -60,7 +60,7 @@ export async function runJob(name, input, execute) {
       context: { retailer, today: context.today, pages, ingredients: context.ingredients },
     });
     return runtime.command({ ...common, mode: 'recipes',
-      text: 'Suggest up to three recipes for today using pantry, recent meals, preferences and verified active offers. Create recipes only when needed and proposed suggestions; do not change meals, shopping lists, preferences or settings. Suggestions expire in two days. Use only put actions for recipes and suggestions with new UUIDs. Never overwrite existing records. If dietary information is missing, return a follow-up with no actions.',
+      text: 'Suggest up to three recipes for today using pantry, recent meals, preferences and verified active offers. Create recipes only when needed and proposed suggestions; do not change meals, shopping lists, preferences or settings. Suggestions expire in two days. Do not repeat a recipe or dish already present in an unexpired proposed, accepted or dismissed suggestion for the same people. Choose different ideas instead. Use only put actions for recipes and suggestions with new UUIDs. Never overwrite existing records. If dietary information is missing, return a follow-up with no actions.',
       context: { today: context.today, timezone: 'Europe/Amsterdam', speaker: context.ownerId, members: context.members, entities: context.state.entities },
     });
   });

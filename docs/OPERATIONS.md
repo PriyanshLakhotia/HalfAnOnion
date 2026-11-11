@@ -51,3 +51,11 @@ Site access must permit the username/password sign-in shell without a ChatGPT lo
 Cloud Run is configured for zero minimum instances and request-based billing. The maximum instance count and durable 30/day AI attempt guard bound usage, but are not a hard monthly cost ceiling. Review actual Cloud Billing; storage, builds, registry and Scheduler may incur charges even with idle compute at zero. See the verification record for deployment status.
 
 The UI reports source failures separately from empty offers. The server logs only route and error class, not request bodies or tokens. Check Site Worker logs for HTTP failures, D1 tables for persisted household state and the app's offer-source panel for last collection status. Do not claim scheduler health from a local invocation alone.
+
+## Recipe capture and schedules
+
+**Recipes → Save a recipe** opens **Photos or text** first. Add up to six photos, enter a name/description/recipe in the single text box, or use **Record** to dictate into that box. Photos alone and text alone both work. **Create recipe** organizes the input and saves one recipe, then opens its details. A necessary clarification stays in the capture tab. **Manual** is the second tab; existing recipe edits continue to use the manual editor. Uploads are resized on the device, sent only for processing, and not stored in the kitchen database. Voice uses the existing household transcription service.
+
+**Settings → Assistant → Scheduled updates** shows each job's next scheduled time in Europe/Amsterdam, with offer-source results when available. Jobs without a selected store are labelled accordingly. The UI and Scheduler deployment script share `companion/schedules.json`; the times describe the configured schedule, not a guarantee of successful execution. Daily recipe runs do not repeat matching, unexpired proposals or recent accept/dismiss decisions. Existing duplicates display once; acting on that card resolves its matching pending duplicates together.
+
+The meal form no longer asks for time or total servings. New meals use the number of selected people; editing an existing meal preserves its stored total and time.

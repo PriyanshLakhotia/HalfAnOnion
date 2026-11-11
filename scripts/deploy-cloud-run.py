@@ -189,7 +189,8 @@ def promote():
 def schedules():
     service = call('GET',f'https://run.googleapis.com/v2/projects/{PROJECT}/locations/{REGION}/services/{SERVICE}')
     base = f'https://cloudscheduler.googleapis.com/v1/projects/{PROJECT}/locations/{REGION}/jobs'
-    jobs = {'recipes':'0 9 * * *','offers-AH':'0 14 * * 5','offers-ALDI':'0 14 * * 3','offers-Jumbo':'0 14 * * 6','offers-PLUS':'20 14 * * 6'}
+    definitions = json.loads((ROOT / 'companion' / 'schedules.json').read_text())
+    jobs = {j['id']: f"{j['minute']} {j['hour']} * * {j['weekday'] if j['weekday'] is not None else '*'}" for j in definitions}
     for job, schedule in jobs.items():
         name = f'projects/{PROJECT}/locations/{REGION}/jobs/onion-{job.lower()}'
         payload = {'name':name,'schedule':schedule,'timeZone':'Europe/Amsterdam','attemptDeadline':'210s',

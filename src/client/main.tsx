@@ -15,6 +15,7 @@ import {
 import {
   today,
   plusDays,
+  pendingSuggestions,
   profileSchema,
   activeOffer,
   type Kind,
@@ -24,6 +25,8 @@ import {
 import { retailerRules } from "../domain/retailers";
 import { api, clearLocal, useKitchen, type Snapshot } from "./store";
 import "./style.css";
+import { ScheduleStatus } from "./schedule-status";
+import { RecipeCreator } from "./recipe-creator";
 const units = [
   "",
   "g",
@@ -347,9 +350,7 @@ function App() {
             b.mealType,
           ),
     );
-  const suggestions = entries(e.suggestions).filter(
-    (s) => s.status === "proposed" && s.expiresOn >= today(),
-  );
+  const suggestions = pendingSuggestions(e.suggestions);
   const latest = [...state.activity]
     .reverse()
     .find((a) => a.actor === user.id && !a.undone);
@@ -1620,16 +1621,12 @@ function App() {
                       </small>
                     </div>
                   </div>
-                  <div className="setting-row">
-                    <div>
-                      <strong>Automatic ideas</strong>
-                      <small>
-                        {ai.schedules
-                          ? "Recipes daily at 09:00 · store offers weekly · Amsterdam time"
-                          : "Scheduled updates are being set up"}
-                      </small>
-                    </div>
-                  </div>
+                  <ScheduleStatus
+                    configured={ai.schedules}
+                    connected={ai.connected}
+                    stores={stores}
+                    offerJobs={state.offerJobs}
+                  />
                   <p className="fine">
                     Recordings are deleted after transcription.
                   </p>
@@ -1917,6 +1914,30 @@ function App() {
                 </>
               )}
             </div>
+          ) : modal.kind === "recipes" && !modal.item ? (
+            <RecipeCreator
+              voiceEnabled={!!ai.transcription}
+              saved={async (recipe) => {
+                await k.refresh();
+                setTab("recipes");
+                setModal(
+                  recipe ? { kind: "recipe-detail", item: recipe } : null,
+                );
+                k.setNotice("Recipe saved.");
+              }}
+              manual={
+                <Editor
+                  kind="recipes"
+                  data={data}
+                  save={async (actions) => {
+                    await act(actions);
+                    setModal(null);
+                  }}
+                  close={() => setModal(null)}
+                  refresh={k.refresh}
+                />
+              }
+            />
           ) : (
             <Editor
               kind={modal.kind}
@@ -2154,7 +2175,7 @@ function Editor({
             record = {
               ...d,
               participants,
-              servings: Number(d.servings),
+              servings: item?.id ? item.servings : participants.length,
               components,
               cooked: d.cooked === "on",
             };
@@ -2261,14 +2282,6 @@ function Editor({
                   )}
                 </select>
               </Field>
-              {input("time", "Time (optional)", "time")}
-              {input(
-                "servings",
-                "Total servings",
-                "number",
-                participants.length,
-                { required: true, min: 0.5, max: 100, step: 0.5 },
-              )}
             </div>
             <Field label="Who’s eating?">
               {people(participants, setParticipants)}

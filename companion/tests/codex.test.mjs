@@ -77,3 +77,27 @@ test('a conversational reply completes with no unnecessary correction or writes'
   assert.deepEqual(result.result.actions, []);
   assert.equal(inputs.length, 1);
 });
+
+test('recipe photos are sent as ordered image inputs with a recipe-only output schema', async () => {
+  const runtime = new CodexRuntime({ home: '/data/test-codex' });
+  runtime.status = async () => ({ connected: true, models: [{ model: 'test-model', supportedReasoningEfforts: [{ reasoningEffort: 'high' }] }] });
+  const photos = ['data:image/png;base64,first', 'data:image/jpeg;base64,second'];
+  runtime.rpc = async (method, params) => {
+    if (method === 'thread/start') { assert.match(params.baseInstructions, /Photos alone are sufficient/); return { thread: { id: 'photo-thread' } }; }
+    if (method === 'thread/archive') return {};
+    assert.equal(method, 'turn/start');
+    assert.deepEqual(params.input.slice(1), photos.map(url => ({ type: 'image', url })));
+    assert.equal(params.outputSchema.properties.actions.items.properties.kind.const, 'recipes');
+    runtime.active.resolve({ status: 'completed', text: JSON.stringify(goodRecipe) });
+    return { turn: { id: 'photo-turn' } };
+  };
+  const result = await runtime.command({ ...commandInput, mode: 'recipe-capture', images: photos });
+  assert.equal(result.result.actions.length, 1);
+  assert.equal(result.result.actions[0].kind, 'recipes');
+});
+test('recipe capture corrects an unrelated model action before returning it', async () => {
+  const bad = { message: 'Rice', followUp: false, actions: [{ type: 'put', kind: 'items', id: 'rice', data: { name: 'Rice' } }] };
+  const { runtime, inputs } = replies([bad, goodRecipe]);
+  const result = await runtime.command({ ...commandInput, mode: 'recipe-capture' });
+  assert.equal(inputs.length, 2); assert.equal(result.result.actions[0].kind, 'recipes');
+});

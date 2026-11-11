@@ -39,12 +39,14 @@ test('generated contract is strict at every object and its recipe fields match s
 });
 for (const [kind, input] of Object.entries(fixtures)) {
   test(`${kind}: a model creation passes JSON schema, decoding and actual domain validation`, () => {
+    const initial = structuredClone(state);
+    if (kind === 'suggestions') initial.entities.suggestions = {};
     const data = schemas[kind as Kind].parse(input);
     const raw = packet([{ type: 'put', kind, id: kind + '-2', data }]);
     assert.ok(validWire(raw), JSON.stringify(validWire.errors));
     const decoded = decodeAssistantOutput(raw);
-    assert.doesNotThrow(() => validateAssistantResult(decoded, state, member.id, [member]));
-    const saved = applyOperation(state, { id: crypto.randomUUID(), actions: decoded.actions }, member.id, [member], Date.now(), 'assistant');
+    assert.doesNotThrow(() => validateAssistantResult(decoded, initial, member.id, [member]));
+    const saved = applyOperation(initial, { id: crypto.randomUUID(), actions: decoded.actions }, member.id, [member], Date.now(), 'assistant');
     assert.ok(saved.state.entities[kind as Kind][kind + '-2']);
   });
   test(`${kind}: typed patches preserve unrelated fields and reject stale values`, () => {

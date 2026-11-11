@@ -1,0 +1,7 @@
+[
+  { "id": "recipes", "label": "Meal suggestions", "retailer": null, "weekday": null, "hour": 9, "minute": 0 },
+  { "id": "offers-AH", "label": "AH Bonus", "retailer": "AH", "weekday": 5, "hour": 14, "minute": 0 },
+  { "id": "offers-ALDI", "label": "ALDI offers", "retailer": "ALDI", "weekday": 3, "hour": 14, "minute": 0 },
+  { "id": "offers-Jumbo", "label": "Jumbo offers", "retailer": "Jumbo", "weekday": 6, "hour": 14, "minute": 0 },
+  { "id": "offers-PLUS", "label": "PLUS offers", "retailer": "PLUS", "weekday": 6, "hour": 14, "minute": 20 }
+]

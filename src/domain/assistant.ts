@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { schemas, operationSchema, applyOperation, emptyState, DomainError, type Kind, type State, type Member } from './model';
 
+export { recipeCaptureSchema, MAX_RECIPE_REQUEST_BYTES } from './recipe-capture';
+
 // The model contract and validation use the same entity schemas as manual edits.
 const kinds = Object.keys(schemas).filter(kind => kind !== 'offers') as Exclude<Kind, 'offers'>[];
 const recordId = z.string().min(1).max(150);
@@ -51,6 +53,10 @@ function structuredSchema(schema: z.ZodTypeAny) {
   return output;
 }
 export const assistantOutputSchema = structuredSchema(wire);
+export const recipeCaptureOutputSchema = structuredSchema(z.object({
+  message: z.string().max(1200), followUp: z.boolean(),
+  actions: z.array(z.object({ type: z.literal('put'), kind: z.literal('recipes'), id: recordId, data: schemas.recipes.strict() }).strict()).max(1),
+}).strict());
 export const offerOutputSchema = structuredSchema(offers);
 export const INVALID_ASSISTANT_OUTPUT = 'The assistant could not prepare a valid kitchen update. Nothing was changed. Your text is saved; try a smaller request.';
 const variantsByAction = new Map(variants.map((schema: any) => [schema.shape.type.value + ':' + (schema.shape.kind?.value ?? ''), schema]));
@@ -121,6 +127,8 @@ export function parseAssistantResult(raw: unknown) {
 export function validateAssistantResult(raw: unknown, state: State, actor: string, members: Member[], mode = 'interactive') {
   const parsed = parseAssistantResult(raw);
   if (!parsed.actions.length) return parsed;
+  if (mode === 'recipe-capture' && (parsed.actions.length !== 1 || parsed.actions[0].type !== 'put' || parsed.actions[0].kind !== 'recipes'))
+    throw new DomainError('Recipe capture can only create one recipe.', 403);
   if (mode === 'recipes' && (parsed.actions.length > 6 || parsed.actions.some(a => a.type !== 'put' || !['recipes', 'suggestions'].includes(a.kind ?? '') || (a.kind === 'suggestions' && a.data?.status !== 'proposed'))))
     throw new DomainError('Scheduled recipes may only add up to three recipe proposals.', 403);
   if (parsed.actions.filter(a => a.type === 'remove' || a.type === 'forget').length > 1)

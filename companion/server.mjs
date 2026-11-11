@@ -6,6 +6,7 @@ import { CodexRuntime } from './codex.mjs';
 import { StateStore, once } from './state.mjs';
 import { transcribe } from './voice.mjs';
 import { runJob } from './jobs.mjs';
+import { recipeCaptureSchema, MAX_RECIPE_REQUEST_BYTES } from './contract.mjs';
 import { LoginSessions, streamLogin } from './login.mjs';
 
 const key = process.env.BRIDGE_SECRET;
@@ -71,7 +72,7 @@ const server = http.createServer(async (req, res) => {
     return send(401, { error: 'Unauthorized' });
   if (req.method !== 'POST') return send(405, { error: 'POST required' });
   try {
-    const maximum = req.url === '/transcribe' ? 8 * 1024 * 1024 : 250000;
+    const maximum = req.url === '/transcribe' ? 8 * 1024 * 1024 : req.url === '/recipe' ? MAX_RECIPE_REQUEST_BYTES + 2 * 1024 * 1024 : 250000;
     let size = 0; const chunks = [];
     for await (const chunk of req) {
       size += chunk.length;
@@ -95,6 +96,14 @@ const server = http.createServer(async (req, res) => {
       if (req.url === '/status') return { ...await runtime.status(), transcription: true, transcription_provider: 'whisper' };
       if (req.url === '/models') return { models: await runtime.models() };
       if (req.url === '/disconnect') { const r = await runtime.disconnect(); delete data.auth; return r; }
+      if (req.url === '/recipe') {
+        const capture = recipeCaptureSchema.safeParse({ id: input.id, text: input.text, images: input.images });
+        if (!capture.success) throw Object.assign(new Error('Add recipe text or up to six valid photos.'), { status: 400 });
+        return once(data, commit, capture.data.id, () => runtime.command({
+          text: capture.data.text || 'Create a recipe from these photos.', images: capture.data.images,
+          mode: 'recipe-capture', context: input.context, model: input.model, reasoning: input.reasoning,
+        }));
+      }
       if (req.url !== '/command') throw Object.assign(new Error('Not found'), { status: 404 });
       if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(input.id) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 4000)
         throw Object.assign(new Error('Invalid instruction'), { status: 400 });

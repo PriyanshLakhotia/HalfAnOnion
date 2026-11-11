@@ -52,3 +52,7 @@ The service URL is printed by a successful deploy, never guessed. Provisioning d
 ## Costs
 
 Minimum zero removes idle instance compute, but active requests, builds, registry/storage and Scheduler can still incur Google Cloud charges. The durable 30/day model-attempt cap and single-instance limit are abuse bounds, **not a €5 hard spending cap**. Check actual billing before claiming that budget. No separately billed OpenAI API is configured.
+
+## Recipe capture
+
+The authenticated `/recipe` endpoint accepts bounded text and up to six inline JPEG/PNG/WebP images from the Site. Codex receives ordered image inputs and a recipe-only output schema. Both services enforce exactly one new recipe or a no-write follow-up. Images never become household records; only the structured recipe is retained. `scripts/verify-recipe-capture-live.mjs` checks a real two-photo-only request, text-only request and idempotent replay through an isolated Worker/D1 database. Set `ONION_TEST_AUDIO` to a spoken recipe WAV to also verify transcription into capture. Run against a verified candidate with `node --use-env-proxy`; supply the bridge credential only through the environment.
