@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DomainError, today, operationSchema } from '../domain/model';
+import { DomainError, today, operationSchema, assistantState } from '../domain/model';
 import { body, json, sha, snapshot, mutate, type Actor, type Env } from './service';
 import { ingest } from './discovery';
 import { bridge } from './ai';
@@ -20,7 +20,7 @@ export async function jobRoute(request: Request, env: Env, path: string) {
       return json({ skipped: true, reason: 'Retailer is not selected.' });
     snap.state.entities.memories = Object.fromEntries(Object.entries(snap.state.entities.memories).filter(([,m]) => !m.forgotten));
     snap.state.entities.offers = Object.fromEntries(Object.entries(snap.state.entities.offers).filter(([,o]) => o.start <= today() && o.end >= today() && Date.now() - o.fetchedAt < 8 * 86400000));
-    return json({ today: today(), ownerId: actor.id, members: snap.members, state: snap.state,
+    return json({ today: today(), ownerId: actor.id, members: snap.members, state: assistantState(snap.state),
       ingredients: [...new Set(Object.values(snap.state.entities.items).map(i => i.name))].slice(0,100) });
   }
   if (path === '/internal/jobs/offers') return json(await ingest(env, actor, input));

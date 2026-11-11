@@ -118,6 +118,8 @@ test('photo-only capture forwards ordered photos and saves exactly one recipe; r
   const r = await req('/api/ai/recipe', { id, images: [capturePhoto, capturePhoto] });
   assert.equal(r.status, 200, await r.clone().text());
   const result = await r.json() as any;
+  assert.equal(result.recipe.collection, "ours");
+  assert.equal(lastCapture.context.entities.recipes["legacy-dal"], undefined);
   assert.equal(result.completed, true); assert.equal(result.recipe.name, 'Tomato soup');
   assert.equal(lastCapture.text, ''); assert.deepEqual(lastCapture.images, [capturePhoto, capturePhoto]);
   const after = await state();
@@ -149,4 +151,34 @@ test('empty or external-image capture fails before model access; photo payloads 
   const r = await req('/api/ai/recipe', { id: crypto.randomUUID(), images: [large] });
   assert.equal(r.status, 200, await r.clone().text());
   assert.ok(lastCapture.images[0].length > 250000);
+});
+
+test('saved library is isolated from suggestions across chat, capture and scheduled context', async () => {
+  const created = await command(packet([{ type: 'put', kind: 'recipes', id: 'unsaved-test', data: { name: 'Unaccepted test recipe' } }]));
+  assert.equal(created.status, 200);
+  assert.equal((await state()).entities.recipes['unsaved-test'].collection, 'suggested');
+  await command(packet());
+  assert.equal(lastContext.entities.recipes['unsaved-test'], undefined);
+  assert.ok(lastContext.recentActivity.every((a: any) => a.changes.every((c: any) => c.id !== 'unsaved-test')));
+  assert.equal((await state()).entities.recipes['captured-soup'].collection, 'ours');
+  const context = await req('/internal/jobs/context', {}, true);
+  const scheduled = await context.json() as any;
+  assert.equal(scheduled.state.entities.recipes['unsaved-test'], undefined);
+  assert.equal(scheduled.state.entities.recipes['captured-soup'].collection, 'ours');
+  const save = await req('/api/operations', { id: crypto.randomUUID(), actions: [{ type: 'save-recipe', kind: 'recipes', id: 'unsaved-test', expected: { version: 1 } }] });
+  assert.equal(save.status, 200, await save.clone().text());
+  await command(packet());
+  assert.equal((lastContext as any).entities.recipes['unsaved-test'].collection, 'saved');
+});
+test('restaurant suggestions save and plan through the real API without creating recipes', async () => {
+  const before = await state();
+  const result = await command(packet([{ type: 'put', kind: 'suggestions', id: 'dinner-out', data: { name: 'Dinner out', kind: 'restaurant', recipeId: '', location: 'Amsterdam', participants: [ownerId], expiresOn: '2099-01-01' } }]));
+  assert.equal(result.status, 200, await result.clone().text());
+  assert.deepEqual((await state()).entities.recipes, before.entities.recipes);
+  const plan = await req('/api/operations', { id: crypto.randomUUID(), actions: [{ type: 'accept', kind: 'suggestions', id: 'dinner-out', data: { date: '2099-01-01' } }] });
+  assert.equal(plan.status, 200, await plan.clone().text());
+  const after = await state();
+  const meal: any = Object.values(after.entities.meals).find((m: any) => m.name === 'Dinner out');
+  assert.equal(meal.kind, 'eating-out'); assert.deepEqual(meal.components, []);
+  assert.deepEqual(after.entities.recipes, before.entities.recipes);
 });

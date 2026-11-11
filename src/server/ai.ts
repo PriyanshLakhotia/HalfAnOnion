@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { recipeCaptureSchema, MAX_RECIPE_REQUEST_BYTES } from "../domain/recipe-capture";
-import { DomainError, today } from "../domain/model";
+import { DomainError, today, assistantState } from "../domain/model";
 import { parseAssistantResult, validateAssistantResult, assistantValidationIssues, INVALID_ASSISTANT_OUTPUT } from '../domain/assistant';
 import {
   body,
@@ -118,14 +118,14 @@ export async function aiRoute(
     const result = await bridge(env, '/recipe', {
       ...input, model: snap.state.model, reasoning: snap.state.reasoning,
       context: { today: today(), timezone: 'Europe/Amsterdam', speaker: actor.id, members: snap.members,
-        entities: snap.state.entities },
+        entities: assistantState(snap.state).entities },
     });
     if (result.status !== 'completed') throw new DomainError('Recipe capture did not finish. Your input is still here; try again.', 502);
     let parsed;
     try { parsed = validateAssistantResult(result.result, snap.state, actor.id, snap.members, 'recipe-capture'); }
     catch (error) { throw new DomainError('The assistant could not prepare a valid recipe. Nothing was saved. Try again.', 502); }
     if (parsed.followUp || !parsed.actions.length) return json({ completed: false, message: parsed.message });
-    await mutate(env, actor, { id: input.id, actions: parsed.actions }, 'assistant');
+    await mutate(env, actor, { id: input.id, actions: parsed.actions }, 'capture');
     const saved = await snapshot(env, actor);
     return json({ completed: true, message: 'Recipe saved.', recipe: saved.state.entities.recipes[parsed.actions[0].id!] });
   }
@@ -139,20 +139,14 @@ export async function aiRoute(
       .parse(await body(request));
     await limit(env.DB, "agent:" + actor.household_id, 30, 86400000);
     const snap = await snapshot(env, actor);
+    const knowledge = assistantState(snap.state);
     const context = {
       today: today(),
       timezone: "Europe/Amsterdam",
       speaker: actor.id,
       members: snap.members,
-      recentActivity: snap.state.activity.filter(a => a.actor === actor.id && !a.undone).slice(-10),
-      entities: {
-        ...snap.state.entities,
-        memories: Object.fromEntries(
-          Object.entries(snap.state.entities.memories).filter(
-            ([, m]) => !m.forgotten,
-          ),
-        ),
-      },
+      recentActivity: knowledge.activity.filter(a => a.actor === actor.id && !a.undone).slice(-10),
+      entities: knowledge.entities,
     };
     const result = await bridge(env, "/command", {
       ...input,

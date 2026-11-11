@@ -42,6 +42,7 @@ try {
   const recipe = captured.recipe;
   assert.match(recipe.name, /tomato soup/i);
   assert.equal(recipe.servings, 2);
+  assert.equal(recipe.collection, "ours");
   assert.ok(recipe.ingredients.some(i => /tomato/i.test(i.name) && i.quantity === 250 && i.unit === 'g'));
   assert.ok(recipe.ingredients.some(i => /water/i.test(i.name) && i.quantity === 100 && i.unit === 'ml'));
   assert.ok(recipe.steps.some(step => /12/.test(step)));

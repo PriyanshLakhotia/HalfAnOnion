@@ -98,3 +98,9 @@ The requested username/password-only access for the invited member requires a pu
 ## Acceptance run still required
 
 After enabling the chosen hosting audience and connecting optional services, run the brief's full two-session scenario with real accounts: shared dal/rice dinner, speaker-only chicken lunch, paneer at Bahar; verify inferred groceries are proposals; accept/dismiss; buy offline while another session edits; reconnect; retrieve a sourced active offer; refine a suggestion; repeat Hindi/Hinglish; disconnect AI and repeat manual operations. Record model, reasoning, timestamps, device/browser versions, actual screenshots and production scheduler run IDs. Test signup, expiry/revocation, password/session renewal and installation on physical iPhone Safari and Android Chrome. Do not upgrade this record to “complete” based only on successful deployment.
+
+## Recipe library and recommendation types (2026-11-11)
+
+- Domain/API coverage for explicit saves, ownership after AI editing/capture, legacy classification, undo, duplicate cleanup, exclusion from chat/capture/scheduled context, and restaurant/general meal planning without recipes or groceries.
+- `scripts/verify-recommendations-live.mjs` exercises real recipe/restaurant generation through a candidate companion, with all writes in isolated local D1. The transport asserts that prior unaccepted ideas are absent from subsequent context.
+- Browser visual verification remains unavailable because the managed browser fails to initialize. No browser verification is claimed.

@@ -92,6 +92,7 @@ export const schemas = {
   }),
   recipes: z.object({
     name: text,
+    collection: z.enum(["ours", "saved", "suggested", "dismissed"]).default("ours"),
     sourceUrl: z.union([z.literal(""), z.string().url().max(1000)]).default(""),
     origin: z
       .enum(["manual", "link", "generated", "variation"])
@@ -151,7 +152,10 @@ export const schemas = {
   }),
   suggestions: z.object({
     name: text,
-    recipeId: id,
+    kind: z.enum(["recipe", "restaurant", "meal"]).default("recipe"),
+    recipeId: z.string().max(150).default(""),
+    location: z.string().max(200).default(""),
+    url: z.union([z.literal(""), z.string().url().regex(/^https?:\/\//).max(1000)]).default(""),
     participants: z.array(id).min(1).max(30),
     reason: note,
     date: date.nullable().default(null),
@@ -254,7 +258,8 @@ export class DomainError extends Error {
 export const normalize = (v: string) =>
   v.trim().toLocaleLowerCase().replace(/\s+/g, " ");
 export function sameSuggestion(a: Record<string, any>, b: Record<string, any>) {
-  return (a.recipeId === b.recipeId || normalize(a.name) === normalize(b.name)) &&
+  return ((a.kind ?? "recipe") === (b.kind ?? "recipe")) &&
+    ((a.recipeId && a.recipeId === b.recipeId) || normalize(a.name) === normalize(b.name)) &&
     JSON.stringify([...a.participants].sort()) === JSON.stringify([...b.participants].sort());
 }
 export function pendingSuggestions(records: Record<string, Entity>, date = today()) {
@@ -267,6 +272,45 @@ export function pendingSuggestions(records: Record<string, Entity>, date = today
     result.push(suggestion);
   }
   return result;
+}
+// Old data predates an explicit collection. Preserve user creations even when
+// subsequently suggested by the assistant; only legacy recommendation drafts move.
+export function normalizeRecipeCollections(state: State): State {
+  for (const recipe of Object.values(state.entities.recipes)) {
+    if (recipe.collection) continue;
+    const creation = state.activity.find(a => a.changes.some(c => c.kind === "recipes" && c.id === recipe.id && !c.before && c.after));
+    const bornWithSuggestion = creation?.changes.some(c => c.kind === "suggestions" && c.after?.recipeId === recipe.id);
+    const linked = Object.values(state.entities.suggestions).some(s => s.recipeId === recipe.id);
+    recipe.collection = (creation ? bornWithSuggestion : recipe.origin === "generated" && linked) ? "suggested" : "ours";
+    for (const activity of state.activity) for (const change of activity.changes) {
+      if (change.kind !== "recipes" || change.id !== recipe.id) continue;
+      if (change.before && !change.before.collection) change.before.collection = recipe.collection;
+      if (change.after && !change.after.collection) change.after.collection = recipe.collection;
+    }
+  }
+  return state;
+}
+export function suggestedRecipes(state: State, date = today()): Entity[] {
+  const recipes = Object.values(state.entities.recipes);
+  const excludedNames = new Set(recipes.filter(r => r.collection !== "suggested").map(r => normalize(r.name)));
+  const found = new Set<string>();
+  return recipes.filter(r => r.collection === "suggested").sort((a,b) => b.updatedAt - a.updatedAt).filter(r => {
+    const related = Object.values(state.entities.suggestions).filter(s => s.recipeId === r.id);
+    const name = normalize(r.name);
+    if (excludedNames.has(name) || found.has(name) || (related.length && !related.some(s => s.status === "accepted" || (s.status === "proposed" && s.expiresOn >= date)))) return false;
+    found.add(name); return true;
+  });
+}
+// Suggestions are not preferences or saved recipes. Only explicit saves and
+// recipes used in accepted plans are sent back to the assistant.
+export function assistantState(input: State): State {
+  const state = normalizeRecipeCollections(structuredClone(input));
+  const planned = new Set(Object.values(state.entities.meals).flatMap(m => m.components.map((c: any) => c.recipeId)));
+  state.entities.recipes = Object.fromEntries(Object.entries(state.entities.recipes).filter(([id,r]) => ["ours", "saved"].includes(r.collection) || planned.has(id)));
+  state.entities.suggestions = Object.fromEntries(Object.entries(state.entities.suggestions).filter(([,s]) => s.status === "accepted"));
+  state.entities.memories = Object.fromEntries(Object.entries(state.entities.memories).filter(([,m]) => !m.forgotten));
+  state.activity = state.activity.map(a => ({ ...a, changes: a.changes.filter(c => !["recipes", "suggestions", "memories"].includes(c.kind) || !!state.entities[c.kind][c.id]) })).filter(a => a.changes.length);
+  return state;
 }
 export const matchKey = (v: any) =>
   [v.name, v.brand, v.variant, v.storeId ?? "any", v.unit]
@@ -285,6 +329,8 @@ export const operationSchema = z.object({
           "patch",
           "remove",
           "accept",
+          "save-recipe",
+          "dismiss-recipe",
           "dismiss",
           "purchase",
           "undo",
@@ -353,9 +399,9 @@ export function applyOperation(
   actor: string,
   members: Member[],
   now = Date.now(),
-  source: "manual" | "assistant" | "discovery" = "manual",
+  source: "manual" | "assistant" | "discovery" | "capture" = "manual",
 ): { state: State; label: string } {
-  const state = structuredClone(input),
+  const state = normalizeRecipeCollections(structuredClone(input)),
     changes: Change[] = [];
   const currentDate = today(new Date(now));
   const save = (kind: Kind, id: string, data: Record<string, any> | null) => {
@@ -389,12 +435,14 @@ export function applyOperation(
         if (!members.some((m) => m.id === person))
           throw new DomainError("Choose a household member.");
       if (
-        kind === "suggestions" &&
+        kind === "suggestions" && v.kind === "recipe" &&
         !compatible(state.entities.recipes[v.recipeId], members, v.participants)
       )
         throw new DomainError(
           "This suggestion does not meet the selected dietary profiles.",
         );
+      if (kind === "suggestions" && v.kind !== "recipe" && v.recipeId)
+        throw new DomainError("A restaurant or meal idea cannot reference a recipe.");
       if (kind === "meals")
         for (const c of v.components)
           if (c.recipeId && !state.entities.recipes[c.recipeId])
@@ -571,6 +619,7 @@ export function applyOperation(
       if (kind === 'suggestions' && source === 'assistant' && v.status === 'proposed' &&
           Object.values(state.entities.suggestions).some(s => s.expiresOn >= currentDate &&
             s.status !== 'expired' && sameSuggestion(s, v))) continue;
+      if (kind === "recipes") v.collection = source === "assistant" ? "suggested" : "ours";
       if (kind === "items" && source === "manual") {
         v.status = "confirmed";
         v.origin = "manual";
@@ -601,7 +650,20 @@ export function applyOperation(
               "This was changed on another device. Review the latest version.",
               409,
             );
+      if (["save-recipe", "dismiss-recipe"].includes(a.type)) {
+        if (kind !== "recipes" || source !== "manual")
+          throw new DomainError("Save recipes using the recipe's Save button.", 403);
+        if (!["suggested", "dismissed"].includes(old.collection))
+          throw new DomainError("This recipe is already saved.", 409);
+        save(kind, id, { ...old, collection: a.type === "save-recipe" ? "saved" : "dismissed" });
+        if (a.type === "dismiss-recipe")
+          for (const proposal of Object.values(state.entities.suggestions))
+            if (proposal.status === "proposed" && (proposal.recipeId === id || normalize(proposal.name) === normalize(old.name)))
+              save("suggestions", proposal.id, { ...proposal, status: "dismissed" });
+      }
       if (a.type === "patch") {
+        if (kind === "recipes" && a.data && "collection" in a.data)
+          throw new DomainError("Use the recipe's Save button to add it to your recipes.");
         if (
           kind === "items" &&
           a.data &&
@@ -651,7 +713,8 @@ export function applyOperation(
           throw new DomainError("This proposal has expired.", 409);
         if (kind === "suggestions" && a.type === "accept") {
           const recipe = state.entities.recipes[old.recipeId];
-          if (!recipe || !compatible(recipe, members, old.participants))
+          const recipeIdea = (old.kind ?? "recipe") === "recipe";
+          if (recipeIdea && (!recipe || !compatible(recipe, members, old.participants)))
             throw new DomainError(
               "Review dietary suitability before scheduling.",
             );
@@ -660,14 +723,16 @@ export function applyOperation(
             date: a.data?.date ?? old.date ?? currentDate,
             participants: old.participants,
             servings: old.participants.length,
-            components: [
+            kind: recipeIdea ? "cooking" : old.kind === "restaurant" ? "eating-out" : "undecided",
+            notes: recipeIdea ? "" : [old.reason, old.location, old.url].filter(Boolean).join("\n"),
+            components: recipeIdea ? [
               {
                 name: old.name,
                 recipeId: old.recipeId,
                 participants: old.participants,
                 servings: old.participants.length,
               },
-            ],
+            ] : [],
           });
           save("meals", crypto.randomUUID(), d);
         }
@@ -698,6 +763,17 @@ export function applyOperation(
           status: a.data?.purchased ? "purchased" : "confirmed",
         });
       }
+    }
+  }
+  for (const action of op.actions) {
+    if (action.type !== "put" || action.kind !== "suggestions" || state.entities.suggestions[action.id ?? ""]) continue;
+    const recipeId = action.data?.recipeId;
+    if (source === "assistant" && recipeId && !input.entities.recipes[recipeId] &&
+        !Object.values(state.entities.suggestions).some(s => s.recipeId === recipeId) &&
+        !Object.values(state.entities.meals).some(m => m.components.some((c: any) => c.recipeId === recipeId))) {
+      delete state.entities.recipes[recipeId];
+      const change = changes.findIndex(c => c.kind === "recipes" && c.id === recipeId);
+      if (change >= 0) changes.splice(change, 1);
     }
   }
   // Planning updates infer proposals immediately; undo restores its own recorded changes.

@@ -41,7 +41,7 @@ for (const [kind, input] of Object.entries(fixtures)) {
   test(`${kind}: a model creation passes JSON schema, decoding and actual domain validation`, () => {
     const initial = structuredClone(state);
     if (kind === 'suggestions') initial.entities.suggestions = {};
-    const data = schemas[kind as Kind].parse(input);
+    const data = (kind === "recipes" ? schemas.recipes.omit({ collection: true }) : schemas[kind as Kind]).parse(input);
     const raw = packet([{ type: 'put', kind, id: kind + '-2', data }]);
     assert.ok(validWire(raw), JSON.stringify(validWire.errors));
     const decoded = decodeAssistantOutput(raw);
@@ -78,7 +78,7 @@ test('invalid enums, types, limits, unknown fields and dates cannot become saved
     ['meals', { participants: 'owner' }], ['memories', { confidence: 2 }], ['suggestions', { reason: ['Cheap'] }],
     ['recipes', { unexpectedField: true }],
   ] as [Kind, Record<string, unknown>][]) {
-    const raw = packet([{ type: 'put', kind, id: 'new', data: { ...schemas[kind].parse(fixtures[kind]), ...changes } }]);
+    const raw = packet([{ type: 'put', kind, id: 'new', data: { ...(kind === "recipes" ? schemas.recipes.omit({ collection: true }) : schemas[kind]).parse(fixtures[kind]), ...changes } }]);
     assert.equal(validWire(raw), false, kind + JSON.stringify(changes));
     assert.throws(() => decodeAssistantOutput(raw));
   }

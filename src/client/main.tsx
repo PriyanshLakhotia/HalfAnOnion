@@ -16,6 +16,7 @@ import {
   today,
   plusDays,
   pendingSuggestions,
+  suggestedRecipes,
   profileSchema,
   activeOffer,
   type Kind,
@@ -26,6 +27,7 @@ import { retailerRules } from "../domain/retailers";
 import { api, clearLocal, useKitchen, type Snapshot } from "./store";
 import "./style.css";
 import { ScheduleStatus } from "./schedule-status";
+import { RecipeLibrary } from "./recipe-library";
 import { RecipeCreator } from "./recipe-creator";
 const units = [
   "",
@@ -248,6 +250,7 @@ function App() {
     } | null>(null),
     [store, setStore] = useState("all"),
     [search, setSearch] = useState(""),
+    [recipeView, setRecipeView] = useState("saved"),
     [start, setStart] = useState(today()),
     [person, setPerson] = useState("all"),
     [text, setText] = useState(
@@ -328,7 +331,7 @@ function App() {
     stores = entries(e.stores),
     allMeals = entries(e.meals),
     items = entries(e.items),
-    recipes = entries(e.recipes),
+    recipes = entries(e.recipes).filter(r => ["ours", "saved"].includes(r.collection)),
     memories = entries(e.memories).filter((m) => !m.forgotten),
     pantry = entries(e.pantry);
   const pending = items.filter((i) => i.status === "confirmed").length;
@@ -356,6 +359,15 @@ function App() {
     .find((a) => a.actor === user.id && !a.undone);
   const open = (kind: string, item?: Entity, date?: string) =>
     setModal({ kind, item, date });
+  const saveRecipe = async (recipe: Entity) => {
+    await act([{ type: "save-recipe", kind: "recipes", id: recipe.id, expected: { version: recipe.version } }]);
+    setModal(null);
+    setRecipeView("saved");
+  };
+  const dismissRecipe = async (recipe: Entity) => {
+    await act([{ type: "dismiss-recipe", kind: "recipes", id: recipe.id, expected: { version: recipe.version } }]);
+    setModal(null);
+  };
   async function command() {
     if (!text.trim() || processing) return;
     setProcessing(true);
@@ -816,17 +828,17 @@ function App() {
               {suggestions.length > 0 && (
                 <section className="ideas">
                   <div className="section-heading">
-                    <h2>Meal suggestions</h2>
+                    <h2>Meal ideas</h2>
                   </div>
                   <div className="suggestion-grid">
                     {suggestions.map((s) => (
                       <article key={s.id}>
-                        <h3>{s.name}</h3>
-                        <p>{s.reason}</p>
-                        <small>
-                          {s.activeMinutes} min active · {s.totalMinutes} min
-                          total
-                        </small>
+                        <small className="idea-kind">{s.kind === "restaurant" ? "Eating out" : s.kind === "meal" ? "Meal idea" : "Cook at home"}</small>
+                        {e.recipes[s.recipeId] ? <button className="idea-title" onClick={() => open("recipe-detail", e.recipes[s.recipeId])}><h3>{s.name}</h3></button> : <h3>{s.name}</h3>}
+                        {s.location && <p>{s.location}</p>}
+                        {s.reason && <p>{s.reason}</p>}
+                        {s.totalMinutes > 0 && (s.kind ?? "recipe") === "recipe" && <small>{s.totalMinutes} min</small>}
+                        {s.url && <a className="source-link" href={s.url} target="_blank" rel="noreferrer">Website</a>}
                         <div className="actions">
                           <button
                             onClick={() =>
@@ -835,13 +847,15 @@ function App() {
                                   type: "accept",
                                   kind: "suggestions",
                                   id: s.id,
+                                  expected: { version: s.version },
                                   data: { date: s.date ?? today() },
                                 },
                               ])
                             }
                           >
-                            Plan this
+                            {s.kind === "restaurant" ? "Plan visit" : "Plan this"}
                           </button>
+                          {e.recipes[s.recipeId]?.collection === "suggested" && <button onClick={() => saveRecipe(e.recipes[s.recipeId]).catch(() => {})}>Save recipe</button>}
                           <button
                             className="text-button"
                             onClick={() =>
@@ -1201,51 +1215,9 @@ function App() {
                   Save a recipe
                 </button>
               </div>
-              <div className="search">
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Find a recipe or ingredient"
-                  aria-label="Search recipes"
-                />
-              </div>
-              {recipes.length ? (
-                <div className="recipe-grid">
-                  {recipes
-                    .filter((r) =>
-                      (
-                        r.name +
-                        " " +
-                        r.ingredients.map((x: any) => x.name).join(" ")
-                      )
-                        .toLowerCase()
-                        .includes(search.toLowerCase()),
-                    )
-                    .map((r) => (
-                      <button
-                        className="recipe-card"
-                        key={r.id}
-                        onClick={() => open("recipe-detail", r)}
-                      >
-                        <div className="recipe-card-body">
-                          <h3>{r.name}</h3>
-                          {r.totalMinutes > 0 && (
-                            <p className="recipe-meta">{r.totalMinutes} min</p>
-                          )}
-                          {r.tags.length > 0 && (
-                            <div className="tags">
-                              {r.tags.slice(0, 3).map((t: string) => (
-                                <span key={t}>{t}</span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </button>
-                    ))}
-                </div>
-              ) : (
-                <Empty title="No recipes saved." />
-              )}
+              <RecipeLibrary saved={recipes} suggestions={suggestedRecipes(state)} view={recipeView} setView={setRecipeView}
+                search={search} setSearch={setSearch} open={r => open("recipe-detail", r)}
+                save={r => { saveRecipe(r).catch(() => {}); }} dismiss={r => { dismissRecipe(r).catch(() => {}); }} />
             </>
           )}
           {tab === "pantry" && (
@@ -1834,6 +1806,8 @@ function App() {
           ) : modal.kind === "recipe-detail" ? (
             <RecipeDetail
               recipe={modal.item!}
+              save={() => { saveRecipe(modal.item!).catch(() => {}); }}
+              dismiss={() => { dismissRecipe(modal.item!).catch(() => {}); }}
               close={() => setModal(null)}
               edit={() => open("recipes", modal.item)}
               variation={() =>
@@ -1920,6 +1894,7 @@ function App() {
               saved={async (recipe) => {
                 await k.refresh();
                 setTab("recipes");
+                setRecipeView("saved");
                 setModal(
                   recipe ? { kind: "recipe-detail", item: recipe } : null,
                 );
@@ -1962,8 +1937,12 @@ function RecipeDetail({
   edit,
   variation,
   plan,
+  save,
+  dismiss,
 }: {
   recipe: Entity;
+  save: () => void;
+  dismiss: () => void;
   edit: () => void;
   variation: () => void;
   plan: () => void;
@@ -1972,11 +1951,11 @@ function RecipeDetail({
   const [servings, setServings] = useState(r.servings);
   return (
     <div className="form-body recipe-detail">
-      <div className="recipe-detail-meta">
-        <span>
-          {r.activeMinutes} min active · {r.totalMinutes} min total
-        </span>
-      </div>
+      {(r.totalMinutes > 0 || r.collection === "saved" || r.collection === "suggested") && <div className="recipe-detail-meta">
+        {r.totalMinutes > 0 && <span>{r.totalMinutes} min</span>}
+        {r.collection === "saved" && <span>Saved from AI</span>}
+        {r.collection === "suggested" && <span>AI suggestion</span>}
+      </div>}
       {r.prerequisites && (
         <p className="banner">Before you start: {r.prerequisites}</p>
       )}
@@ -2039,7 +2018,10 @@ function RecipeDetail({
         <button className="primary" onClick={plan}>
           Plan this
         </button>
-        <button onClick={edit}>Edit</button>
+        {["suggested", "dismissed"].includes(r.collection) ? <>
+          <button onClick={save}>Save recipe</button>
+          <button className="text-button" onClick={dismiss}>Not now</button>
+        </> : <button onClick={edit}>Edit</button>}
         <button className="text-button" onClick={variation}>
           Save a variation
         </button>
@@ -2076,7 +2058,7 @@ function Editor({
   const [profile, setProfile] = useState(me.profile);
   const [chain, setChain] = useState(item?.chain ?? "Custom");
   const stores = entries(data.state.entities.stores),
-    recipes = entries(data.state.entities.recipes);
+    recipes = entries(data.state.entities.recipes).filter(r => ["ours", "saved"].includes(r.collection) || item?.components?.some((c: any) => c.recipeId === r.id));
   const ids = data.members.map((m) => m.id);
   const input = (
     name: string,

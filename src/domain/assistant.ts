@@ -8,9 +8,9 @@ export { recipeCaptureSchema, MAX_RECIPE_REQUEST_BYTES } from './recipe-capture'
 const kinds = Object.keys(schemas).filter(kind => kind !== 'offers') as Exclude<Kind, 'offers'>[];
 const recordId = z.string().min(1).max(150);
 const variants: z.ZodTypeAny[] = [];
-const blockedPatchFields: Record<string, string[]> = { items: ['status', 'origin', 'sourceKey'], memories: ['forgotten'] };
+const blockedPatchFields: Record<string, string[]> = { recipes: ['collection'], items: ['status', 'origin', 'sourceKey'], memories: ['forgotten'] };
 for (const kind of kinds) {
-  variants.push(z.object({ type: z.literal('put'), kind: z.literal(kind), id: recordId, data: schemas[kind].strict() }).strict());
+  variants.push(z.object({ type: z.literal('put'), kind: z.literal(kind), id: recordId, data: (kind === "recipes" ? schemas.recipes.omit({ collection: true }) : schemas[kind]).strict() }).strict());
   const fields = Object.entries(schemas[kind].shape).filter(([field]) => !blockedPatchFields[kind]?.includes(field));
   const changes = fields.map(([field, schema]) => {
     const value = schema instanceof z.ZodDefault ? schema.removeDefault() : schema;
@@ -55,7 +55,7 @@ function structuredSchema(schema: z.ZodTypeAny) {
 export const assistantOutputSchema = structuredSchema(wire);
 export const recipeCaptureOutputSchema = structuredSchema(z.object({
   message: z.string().max(1200), followUp: z.boolean(),
-  actions: z.array(z.object({ type: z.literal('put'), kind: z.literal('recipes'), id: recordId, data: schemas.recipes.strict() }).strict()).max(1),
+  actions: z.array(z.object({ type: z.literal('put'), kind: z.literal('recipes'), id: recordId, data: schemas.recipes.omit({ collection: true }).strict() }).strict()).max(1),
 }).strict());
 export const offerOutputSchema = structuredSchema(offers);
 export const INVALID_ASSISTANT_OUTPUT = 'The assistant could not prepare a valid kitchen update. Nothing was changed. Your text is saved; try a smaller request.';
@@ -96,6 +96,8 @@ export function parseAssistantResult(raw: unknown) {
   const parsed = envelope.parse(raw);
   if (parsed.followUp && parsed.actions.length) throw new Error('A follow-up must not include changes.');
   for (const a of parsed.actions) {
+    if (['save-recipe', 'dismiss-recipe'].includes(a.type))
+      throw new DomainError('Use the recipe’s Save button to add it to your recipes.', 403);
     if (['settings', 'clear-history'].includes(a.type) || a.kind === 'offers')
       throw new DomainError('The assistant cannot change account settings or invent offers.', 403);
     if (a.type !== 'groceries' && (!a.id || (a.type !== 'undo' && !a.kind))) throw new Error('An action needs an existing record kind and ID.');
@@ -112,7 +114,7 @@ export function parseAssistantResult(raw: unknown) {
         a.data = schemas[a.kind].partial().strict().parse(data);
         if (!Object.keys(a.data).length || Object.keys(a.data).some(field => !a.expected || !(field in a.expected)))
           throw new Error('Every changed field needs its previous value.');
-      } else a.data = schemas[a.kind].strict().parse(data);
+      } else a.data = (a.kind === "recipes" ? schemas.recipes.omit({ collection: true }) : schemas[a.kind]).strict().parse(data);
     } else if (a.type === 'groceries') {
       a.data = z.object({ from: schemas.meals.shape.date, to: schemas.meals.shape.date, confirm: z.boolean() }).strict().parse(a.data);
     } else if (a.type === 'purchase') {

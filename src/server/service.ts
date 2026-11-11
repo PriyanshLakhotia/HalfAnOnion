@@ -2,6 +2,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import {
   applyOperation,
+  normalizeRecipeCollections,
   DomainError,
   emptyState,
   operationSchema,
@@ -135,7 +136,7 @@ export async function snapshot(env: Env, actor: Actor) {
     .bind(actor.household_id)
     .first<any>();
   if (!row) throw new DomainError("Household not found.", 404);
-  const state = JSON.parse(row.state) as State;
+  const state = normalizeRecipeCollections(JSON.parse(row.state) as State);
   state.activity = state.activity.filter((x) => Date.now() - x.at < 30 * DAY);
   return {
     user: {
@@ -158,7 +159,7 @@ export async function mutate(
   env: Env,
   actor: Actor,
   raw: unknown,
-  source: "manual" | "assistant" | "discovery" = "manual",
+  source: "manual" | "assistant" | "discovery" | "capture" = "manual",
 ) {
   const op = operationSchema.parse(raw);
   if (op.actions.some((a) => a.type === "settings") && actor.role !== "owner")
