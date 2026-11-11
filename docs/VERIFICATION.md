@@ -6,7 +6,7 @@ The live household contained three proposals saved on 10 November at 16:55 Amste
 
 The new first recipe tab accepts photos, free text or voice and saves one structured recipe through the existing subscribed companion. Manual entry remains in the second tab. Meal time and total-servings inputs are removed, with existing saved values preserved. Settings → Assistant shows next scheduled runs using the same schedule declarations as deployment.
 
-Local validation: 74 application tests and 18 companion tests passed, along with TypeScript/contract checks and the production build. Browser QA remains blocked by the computer-use runtime initialization error. The candidate's live image/text/voice verification is recorded separately after deployment testing.
+Local validation: 74 application tests and 18 companion tests passed, along with TypeScript/contract checks and the production build. Browser QA remains blocked by the computer-use runtime initialization error. Candidate `half-an-onion-companion-00007-6zt`, built from `d315dc0d7da38284d64b232a8d7b4eb115a3a6c9`, passed real subscribed-model capture checks through an isolated Worker/D1 kitchen: two recipe photos without any text (25.2 seconds, exact ingredient quantities and steps from both pages), text-only capture (10.6 seconds), and receipt replay without another model request. A spoken WAV was then transcribed by the real companion and its transcript saved as a recipe. The first voice test failed because the Node test harness did not serialize multipart data for Miniflare; serializing through the host Request fixed the harness, with no production service change needed. No production household recipes, meals or shopping items were created during these checks.
 
 ## UI simplification — 10 November 2026
 

@@ -17,9 +17,12 @@ const mf = new Miniflare({ modules: true, scriptPath: 'dist/server/index.js', co
 let cookie = '';
 async function request(path, data) {
   const form = data instanceof FormData;
+  // Serialize with the host Request before crossing into Miniflare's fetch implementation.
+  const multipart = form ? new Request('https://capture.test', { method: 'POST', body: data }) : null;
+  const payload = multipart ? await multipart.arrayBuffer() : data === undefined ? undefined : JSON.stringify(data);
   const r = await mf.dispatchFetch('https://capture.test' + path, {
-    method: data === undefined ? 'GET' : 'POST', headers: { Origin: 'https://capture.test', Cookie: cookie, ...(!form ? { 'Content-Type': 'application/json' } : {}), 'oai-authenticated-user-email': 'capture@test.invalid' },
-    ...(data === undefined ? {} : { body: form ? data : JSON.stringify(data) }),
+    method: data === undefined ? 'GET' : 'POST', headers: { Origin: 'https://capture.test', Cookie: cookie, 'Content-Type': multipart?.headers.get('Content-Type') ?? 'application/json', 'oai-authenticated-user-email': 'capture@test.invalid' },
+    ...(data === undefined ? {} : { body: payload }),
   });
   if (r.headers.has('set-cookie')) cookie = r.headers.get('set-cookie').split(';')[0];
   const result = await r.json(); assert.equal(r.status, 200, JSON.stringify(result)); return result;
@@ -30,6 +33,7 @@ try {
     for (const sql of (await readFile('drizzle/' + file, 'utf8')).split('--> statement-breakpoint').map(s => s.trim()).filter(Boolean)) await db.prepare(sql).run();
   await request('/api/auth/register', { username: 'captureowner', name: 'Test cook', password: 'isolated-capture-test-123' });
   await request('/api/profile', { name: 'Test cook', profile: { diet: 'vegan', eggs: 'no', dairy: 'no', onboarded: true } });
+  if (process.env.ONION_VERIFY_VOICE_ONLY !== '1') {
   const images = await Promise.all([1,2].map(async i => 'data:image/png;base64,' + (await readFile(`tests/fixtures/recipe-page-${i}.png`)).toString('base64')));
   const input = { id: crypto.randomUUID(), images };
   let started = Date.now();
@@ -58,6 +62,7 @@ try {
   assert.match(text.recipe.name, /cucumber/i); assert.equal(text.recipe.servings, 1);
   assert.ok(text.recipe.steps.length); assert.ok(text.recipe.ingredients.length >= 2);
   console.log(JSON.stringify({ check: 'One text box; extracted and saved recipe', seconds: Math.round((Date.now()-started)/100)/10 }));
+  }
   if (process.env.ONION_TEST_AUDIO) {
     const form = new FormData(); form.append('audio', new Blob([await readFile(process.env.ONION_TEST_AUDIO)], { type: 'audio/wav' }), 'recipe.wav');
     const transcript = await request('/api/transcribe', form);
@@ -66,7 +71,7 @@ try {
     assert.equal(dictated.completed, true, dictated.message); assert.match(dictated.recipe.name, /cucumber/i);
     console.log('PASS: voice audio transcribed and saved as a recipe.');
   }
-  snapshot = await request('/api/state');
-  assert.equal(Object.keys(snapshot.state.entities.recipes).length, process.env.ONION_TEST_AUDIO ? 3 : 2);
+  const finalSnapshot = await request('/api/state');
+  assert.equal(Object.keys(finalSnapshot.state.entities.recipes).length, (process.env.ONION_VERIFY_VOICE_ONLY === '1' ? 0 : 2) + (process.env.ONION_TEST_AUDIO ? 1 : 0));
   console.log('PASS: live recipe capture; production household unchanged.');
 } finally { await mf.dispose(); }
