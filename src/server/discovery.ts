@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { retailerRules, type Retailer } from "../domain/retailers";
-import { schemas, DomainError, today, type State, DAY } from "../domain/model";
+import { schemas, DomainError, today, type State, DAY, assistantState } from "../domain/model";
 import {
   json,
   body,
@@ -243,7 +243,7 @@ export async function mcp(request: Request, env: Env) {
         ingredients: [
           ...new Set([
             ...Object.values(s.state.entities.items).map((x) => x.name),
-            ...Object.values(s.state.entities.recipes).flatMap((r) =>
+            ...Object.values(assistantState(s.state).entities.recipes).flatMap((r) =>
               r.ingredients.map((i: any) => i.name),
             ),
           ]),

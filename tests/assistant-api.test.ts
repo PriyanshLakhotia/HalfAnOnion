@@ -182,3 +182,16 @@ test('restaurant suggestions save and plan through the real API without creating
   assert.equal(meal.kind, 'eating-out'); assert.deepEqual(meal.components, []);
   assert.deepEqual(after.entities.recipes, before.entities.recipes);
 });
+test('offer discovery also excludes ingredients from unaccepted recipes', async () => {
+  const response = await command(packet([{ type: 'put', kind: 'recipes', id: 'offer-context-draft', data: { name: 'Unaccepted ingredient test', ingredients: [{ name: 'Unique draft ingredient' }] } }]));
+  assert.equal(response.status, 200);
+  const discover = async () => {
+    const r = await req('/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'discovery_context', arguments: { retailer: 'AH' } } });
+    const result = await r.json() as any;
+    return JSON.parse(result.result.content[0].text).ingredients;
+  };
+  assert.ok(!(await discover()).includes('Unique draft ingredient'));
+  const saved = await req('/api/operations', { id: crypto.randomUUID(), actions: [{ type: 'save-recipe', kind: 'recipes', id: 'offer-context-draft' }] });
+  assert.equal(saved.status, 200);
+  assert.ok((await discover()).includes('Unique draft ingredient'));
+});
