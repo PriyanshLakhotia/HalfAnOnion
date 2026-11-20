@@ -14,6 +14,21 @@ test('overlapping instances cannot acquire the same credentials', async () => {
   await s.withLease(async () => assert.rejects(s.withLease(() => {}), BusyError));
   assert.equal(s.data.lease, undefined);
 });
+test('a prompt waits for an overlapping status read and runs once', async () => {
+  const store = new FakeStore();
+  let prompt;
+  let calls = 0;
+  await store.withLease(async () => {
+    prompt = store.withLease(() => ++calls, 'prompt');
+    assert.equal(calls, 0);
+  }, 'status');
+  assert.equal(await prompt, 1);
+  assert.equal(store.data.lease, undefined);
+});
+test('a second prompt is still refused while a turn owns the lease', async () => {
+  const store = new FakeStore();
+  await store.withLease(() => assert.rejects(store.withLease(() => assert.fail('overlapping prompt ran'), 'prompt'), BusyError), 'prompt');
+});
 test('fenced worker cannot overwrite a newer owner', async () => {
   const s = new FakeStore();
   await assert.rejects(s.withLease(async (data, commit) => {

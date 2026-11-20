@@ -1,5 +1,6 @@
 import { Storage } from '@google-cloud/storage';
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 
 export class BusyError extends Error {
   status = 409;
@@ -28,13 +29,32 @@ export class StateStore {
       preconditionOpts: { ifGenerationMatch: generation },
     });
   }
-  async withLease(work) {
-    const { data, generation } = await this.read();
-    if (data.lease?.until > Date.now()) throw new BusyError();
-    const owner = randomUUID();
-    data.lease = { owner, until: Date.now() + 240_000 };
-    try { await this.save(data, generation); }
-    catch (e) { if ([409, 412].includes(e.code)) throw new BusyError(); throw e; }
+  async acquire(purpose) {
+    // A page-load status check uses the same credentials as a prompt. Let that
+    // short read finish, but never replay work or queue behind another turn.
+    const deadline = Date.now() + 15000;
+    while (true) {
+      const { data, generation } = await this.read();
+      if (data.lease?.until > Date.now()) {
+        if (purpose !== 'prompt' || data.lease.purpose !== 'status' || Date.now() >= deadline)
+          throw new BusyError();
+        await delay(500);
+        continue;
+      }
+      data.lease = { owner: randomUUID(), until: Date.now() + 240_000, purpose };
+      try {
+        await this.save(data, generation);
+        return data;
+      } catch (error) {
+        if (![409, 412].includes(error.code)) throw error;
+        if (purpose !== 'prompt' || Date.now() >= deadline) throw new BusyError();
+        // Re-read the winning lease to distinguish a status check from a turn.
+      }
+    }
+  }
+  async withLease(work, purpose = 'work') {
+    const data = await this.acquire(purpose);
+    const owner = data.lease.owner;
     const commit = async () => {
       const current = await this.read();
       if (current.data.lease?.owner !== owner || data.lease.until <= Date.now())

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
-import { assistantOutputSchema, offerOutputSchema, decodeAssistantOutput, parseAssistantResult, validateAssistantResult, validateModelResult } from '../src/domain/assistant';
+import { assistantOutputSchema, recipeCaptureOutputSchema, offerOutputSchema, decodeAssistantOutput, parseAssistantResult, validateAssistantResult, validateModelResult } from '../src/domain/assistant';
 import { schemas, emptyState, profileSchema, applyOperation, type Kind, type Entity } from '../src/domain/model';
 
 const ajv = new Ajv({ strict: false, allowUnionTypes: true });
@@ -30,12 +30,17 @@ test('generated contract is strict at every object and its recipe fields match s
       assert.deepEqual([...node.required].sort(), Object.keys(node.properties).sort());
     }
     assert.equal(node.default, undefined);
+    assert.notEqual(node.format, 'uri', 'Codex rejects uri anywhere in a response schema');
     Object.values(node).forEach(v => Array.isArray(v) ? v.forEach(walk) : walk(v));
   };
-  walk(assistantOutputSchema); walk(offerOutputSchema);
+  walk(assistantOutputSchema); walk(recipeCaptureOutputSchema); walk(offerOutputSchema);
   const recipe = assistantOutputSchema.properties.actions.items.anyOf.find((a: any) => a.properties.type.const === 'put' && a.properties.kind.const === 'recipes');
   assert.deepEqual(recipe.properties.data.properties.origin.enum, ['manual', 'link', 'generated', 'variation']);
   assert.equal(recipe.properties.data.properties.prerequisites.type, 'string');
+});
+test('invalid generated URLs still fail application validation', () => {
+  const recipe = { ...fixtures.recipes, sourceUrl: 'not a URL' };
+  assert.throws(() => decodeAssistantOutput(packet([{ type: 'put', kind: 'recipes', id: 'draft', data: recipe }])), /url/i);
 });
 for (const [kind, input] of Object.entries(fixtures)) {
   test(`${kind}: a model creation passes JSON schema, decoding and actual domain validation`, () => {

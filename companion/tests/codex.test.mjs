@@ -55,6 +55,11 @@ function replies(outputs) {
   return { runtime, inputs };
 }
 const commandInput = { text: 'Create a dal recipe', model: 'test-model', reasoning: 'high', context: {} };
+test('a rejected response schema identifies the service problem without exposing provider details', async () => {
+  const { runtime } = replies([]);
+  runtime.runTurn = async () => ({ status: 'failed', error: { message: 'Invalid schema for response_format: provider details' } });
+  await assert.rejects(runtime.command(commandInput), { message: 'The assistant service needs an update to its response format. Your input is saved.' });
+});
 const badRecipe = { message: 'Dal', followUp: false, actions: [{ type: 'put', kind: 'recipes', id: 'dal', data: { name: 'Dal', origin: 'inference', prerequisites: ['Soak lentils'] } }] };
 const goodRecipe = { message: 'Dal', followUp: false, actions: [{ type: 'put', kind: 'recipes', id: 'dal', data: { name: 'Dal', origin: 'generated', prerequisites: 'Soak lentils' } }] };
 test('invalid model fields are corrected once before a result can leave the companion', async () => {

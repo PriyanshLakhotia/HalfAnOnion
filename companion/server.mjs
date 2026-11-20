@@ -28,7 +28,7 @@ async function schedulerAuthorized(req) {
     return claim.email_verified === true && claim.email === process.env.SCHEDULER_EMAIL;
   } catch { return false; }
 }
-async function withRuntime(work) {
+async function withRuntime(work, purpose) {
   return store.withLease(async (data, commit) => {
     if (active) throw new Error('The assistant is busy.');
     active = true;
@@ -51,7 +51,7 @@ async function withRuntime(work) {
         await rm(home, { recursive: true, force: true });
       } finally { active = false; }
     }
-  });
+  }, purpose);
 }
 const logins = new LoginSessions(publish => withRuntime(async (runtime, data, commit) => {
   publish(await runtime.connect());
@@ -90,10 +90,11 @@ const server = http.createServer(async (req, res) => {
       if (!(await runtime.status()).connected) return { status: 'not-connected' };
       return once(data, commit, id, () => task(runtime));
     })));
-    if (req.url === '/status' && active)
-      return send(200, { available: true, connected: false, busy: true, login_pending: !!logins.current, transcription: true, transcription_provider: 'whisper' });
+    if (req.url === '/status') {
+      if (active) return send(200, { available: true, connected: false, busy: true, login_pending: !!logins.current, transcription: true, transcription_provider: 'whisper' });
+      return send(200, await withRuntime(async runtime => ({ ...await runtime.status(), transcription: true, transcription_provider: 'whisper' }), 'status'));
+    }
     const result = await withRuntime(async (runtime, data, commit) => {
-      if (req.url === '/status') return { ...await runtime.status(), transcription: true, transcription_provider: 'whisper' };
       if (req.url === '/models') return { models: await runtime.models() };
       if (req.url === '/disconnect') { const r = await runtime.disconnect(); delete data.auth; return r; }
       if (req.url === '/recipe') {
@@ -108,7 +109,7 @@ const server = http.createServer(async (req, res) => {
       if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(input.id) || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 4000)
         throw Object.assign(new Error('Invalid instruction'), { status: 400 });
       return once(data, commit, input.id, () => runtime.command({ text: input.text, context: input.context, model: input.model, reasoning: input.reasoning, priorContext: input.priorContext }));
-    });
+    }, ['/command', '/recipe'].includes(req.url) ? 'prompt' : 'work');
     if (res.headersSent) res.end(); else send(200, result);
   } catch (error) {
     const message = error.code ? 'Assistant storage is unavailable. Try again later.' : (error.message || 'Assistant unavailable').slice(0, 300);

@@ -43,6 +43,9 @@ function structuredSchema(schema: z.ZodTypeAny) {
   const strict = (node: any) => {
     if (!node || typeof node !== 'object') return;
     delete node.$schema; delete node.default;
+    // Codex rejects the JSON Schema uri format. Zod still validates every URL
+    // when decoding the generated actions, before any kitchen records are saved.
+    if (node.format === 'uri') delete node.format;
     if (node.type === 'object') {
       node.additionalProperties = false;
       node.required = Object.keys(node.properties ?? {});

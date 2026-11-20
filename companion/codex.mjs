@@ -111,8 +111,8 @@ export class CodexRuntime {
         m.method === "turn/completed" &&
         m.params.threadId === active.threadId
       ) {
-        const status = m.params.turn.status;
-        active.resolve({ status, text: active.text });
+        const { status, error } = m.params.turn;
+        active.resolve({ status, error, text: active.text });
         this.active = null;
       }
       // Approvals and unknown tool calls are denied; only bounded structured output is used.
@@ -288,6 +288,8 @@ export class CodexRuntime {
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
         const done = await this.runTurn(threadId, input, schema, reasoning, deadline, attempt === 0 ? images : []);
+        if (done.status === 'failed' && /invalid_json_schema|invalid schema for response_format/i.test(done.error?.message ?? ''))
+          throw new Error('The assistant service needs an update to its response format. Your input is saved.');
         if (done.status !== 'completed') return { status: done.status };
         try {
           const result = validateModelResult(JSON.parse(done.text), context, mode);
