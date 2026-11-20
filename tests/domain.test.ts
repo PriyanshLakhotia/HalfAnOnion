@@ -40,6 +40,11 @@ const run = (
     Date.now(),
     source,
   ).state;
+test("the kitchen can save Sol 6.2's Ultra thinking level", () => {
+  const state = run(emptyState(), [{ type: "settings", data: { model: "gpt-6.2-sol", reasoning: "ultra" } }]);
+  assert.equal(state.model, "gpt-6.2-sol");
+  assert.equal(state.reasoning, "ultra");
+});
 test("proposal acceptance and purchase are distinct, expiry retains accepted item", () => {
   let s = run(
     emptyState(),

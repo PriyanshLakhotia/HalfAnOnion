@@ -217,6 +217,7 @@ export type State = {
   reasoning: string;
   offerJobs: Record<string, any>;
 };
+export const DEFAULT_MODEL = "gpt-6.2-sol";
 export function emptyState(): State {
   return {
     entities: {
@@ -242,7 +243,7 @@ export function emptyState(): State {
       offers: {},
     },
     activity: [],
-    model: "gpt-6.1-sol",
+    model: DEFAULT_MODEL,
     reasoning: "high",
     offerJobs: {},
   };
@@ -572,7 +573,7 @@ export function applyOperation(
       const d = z
         .object({
           model: z.string().min(1).max(80),
-          reasoning: z.enum(["none", "low", "medium", "high", "xhigh", "max"]),
+          reasoning: z.enum(["none", "low", "medium", "high", "xhigh", "max", "ultra"]),
         })
         .parse(a.data);
       state.model = d.model;

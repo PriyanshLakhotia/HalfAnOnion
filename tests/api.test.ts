@@ -170,7 +170,7 @@ test("AI connection is explicit and never falls back to paid reasoning", async (
     await req("/api/ai/status", undefined, ownerCookie)
   ).json()) as any;
   assert.equal(status.connected, false);
-  assert.equal(status.model, "gpt-6.1-sol");
+  assert.equal(status.model, "gpt-6.2-sol");
   assert.equal(status.reasoning, "high");
   assert.equal(
     (

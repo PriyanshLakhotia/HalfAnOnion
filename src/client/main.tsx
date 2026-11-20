@@ -13,6 +13,7 @@ import {
   Settings2,
 } from "lucide-react";
 import {
+  DEFAULT_MODEL,
   today,
   plusDays,
   pendingSuggestions,
@@ -29,6 +30,12 @@ import "./style.css";
 import { ScheduleStatus } from "./schedule-status";
 import { RecipeLibrary } from "./recipe-library";
 import { RecipeCreator } from "./recipe-creator";
+type AssistantModel = {
+  model: string;
+  displayName: string;
+  defaultReasoningEffort: string;
+  supportedReasoningEfforts: { reasoningEffort: string }[];
+};
 const units = [
   "",
   "g",
@@ -334,6 +341,9 @@ function App() {
     recipes = entries(e.recipes).filter(r => ["ours", "saved"].includes(r.collection)),
     memories = entries(e.memories).filter((m) => !m.forgotten),
     pantry = entries(e.pantry);
+  const models: AssistantModel[] = ai.models ?? [];
+  const selectedModel = models.find(m => m.model === state.model);
+  const thinkingLevels = selectedModel?.supportedReasoningEfforts ?? [];
   const pending = items.filter((i) => i.status === "confirmed").length;
   const days = Array.from({ length: 7 }, (_, i) => plusDays(start, i));
   const meals = allMeals
@@ -1527,35 +1537,29 @@ function App() {
                   <Field label="Model">
                     <select
                       value={state.model}
-                      onChange={(event) =>
-                        quietly([
-                          {
-                            type: "settings",
-                            data: {
-                              model: event.target.value,
-                              reasoning: state.reasoning,
-                            },
-                          },
-                        ])
-                      }
+                      disabled={user.role !== "owner" || !models.length}
+                      onChange={(event) => {
+                        const next = models.find(m => m.model === event.target.value);
+                        if (!next) return;
+                        const reasoning = next.supportedReasoningEfforts.some(r => r.reasoningEffort === state.reasoning)
+                          ? state.reasoning : next.defaultReasoningEffort;
+                        quietly([{ type: "settings", data: { model: next.model, reasoning } }]);
+                      }}
                     >
-                      <option value={state.model}>
-                        {state.model}{" "}
-                        {ai.connected ? "" : "(requested default)"}
-                      </option>
-                      {(ai.models ?? [])
-                        .filter((m: any) => m.model !== state.model)
-                        .map((m: any) => (
-                          <option key={m.id} value={m.model}>
-                            {m.displayName ?? m.model}
-                          </option>
-                        ))}
+                      {!selectedModel && <option value={state.model}>
+                        {state.model}{models.length ? " (unavailable)" : ""}
+                      </option>}
+                      {models.map(m => (
+                        <option key={m.model} value={m.model}>
+                          {m.displayName || m.model}{m.model === DEFAULT_MODEL ? " (default)" : ""}
+                        </option>
+                      ))}
                     </select>
                   </Field>
                   <Field label="Thinking">
                     <select
                       value={state.reasoning}
-                      disabled={!ai.models?.length}
+                      disabled={user.role !== "owner" || !thinkingLevels.length}
                       onChange={(event) =>
                         quietly([
                           {
@@ -1568,12 +1572,12 @@ function App() {
                         ])
                       }
                     >
-                      {(
-                        ai.models?.find((m: any) => m.model === state.model)
-                          ?.supportedReasoningEfforts ?? [
-                          { reasoningEffort: "high" },
-                        ]
-                      ).map((r: any) => (
+                      {!thinkingLevels.some(r => r.reasoningEffort === state.reasoning) && (
+                        <option value={state.reasoning}>
+                          {titleCase(state.reasoning)}{thinkingLevels.length ? " (unavailable)" : ""}
+                        </option>
+                      )}
+                      {thinkingLevels.map(r => (
                         <option
                           key={r.reasoningEffort}
                           value={r.reasoningEffort}
