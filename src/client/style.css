@@ -268,9 +268,10 @@ p {
   font-weight: 550;
 }
 .workspace {
+  display: flex;
+  flex-direction: column;
   margin-left: 224px;
   width: calc(100% - 224px);
-  padding-bottom: 150px;
 }
 .topbar {
   display: none;
@@ -281,8 +282,10 @@ p {
   margin-bottom: 20px;
 }
 .content {
+  flex: 1;
+  width: 100%;
   max-width: 1400px;
-  margin: auto;
+  margin: 0 auto;
   padding: 42px 42px 10px;
 }
 .page-heading {
@@ -429,18 +432,6 @@ p {
   justify-content: flex-start;
   padding: 8px 2px;
   width: 100%;
-}
-.plan-foot {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin-top: 12px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.plan-foot .text-button {
-  font-size: 12px;
 }
 .ideas {
   margin-top: 43px;
@@ -832,40 +823,81 @@ p {
 .settings-section .fine {
   margin-top: 18px;
 }
-.capture-wrap {
-  position: fixed;
+.workspace-footer {
+  position: sticky;
   bottom: 0;
-  left: 224px;
-  right: 0;
-  padding: 20px 42px 18px;
-  background: #fafaf8;
   z-index: 15;
   pointer-events: none;
+}
+.capture-wrap {
+  padding: 16px 42px 18px;
+  background: #fafaf8;
+}
+.capture-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 800px;
+  margin: 0 auto 8px;
+}
+.capture-prompts button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid #d4e0ce;
+  border-radius: 999px;
+  background: #edf3e9;
+  color: #354e37;
+  font-weight: 600;
+  pointer-events: auto;
+}
+.capture-prompts button:hover {
+  background: #e2ecdc;
+  border-color: #b9cbb3;
 }
 .capture {
   max-width: 800px;
   margin: auto;
   display: flex;
-  align-items: center;
+  align-items: end;
   gap: 12px;
   border: 1px solid #d8dbd3;
   background: var(--surface);
-  border-radius: 6px;
+  border-radius: 16px;
   padding: 8px;
   pointer-events: auto;
 }
+.capture:focus-within {
+  border-color: #90a38c;
+}
+.capture-draft {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.capture textarea,
+.capture-draft-size {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 44px;
+  max-height: clamp(5rem, 28dvh, 13rem);
+  padding: 8px 0;
+  font-size: 16px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
 .capture textarea {
+  width: 100%;
+  align-self: stretch;
   border: 0;
   background: transparent;
-  min-height: 34px;
-  max-height: 110px;
   resize: none;
-  flex: 1;
-  padding: 8px 0;
-  font-size: 14px;
-  line-height: 1.5;
+  overflow-y: auto;
   outline: none;
-  min-width: 0;
+}
+.capture-draft-size {
+  visibility: hidden;
+  overflow: hidden;
 }
 .capture .mic {
   border: 0;
@@ -878,8 +910,8 @@ p {
   background: var(--accent);
   border: 0;
   color: white;
-  min-width: 38px;
-  min-height: 38px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 8px;
 }
 .capture.recording {
@@ -1230,7 +1262,6 @@ summary {
     padding: 0 26px;
   }
   .capture-wrap {
-    left: 195px;
     padding: 18px 26px;
   }
   .day > header {
@@ -1277,9 +1308,6 @@ summary {
     margin-left: 175px;
     width: calc(100% - 175px);
   }
-  .capture-wrap {
-    left: 175px;
-  }
   .week-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     overflow: visible;
@@ -1316,7 +1344,6 @@ summary {
   .workspace {
     margin: 0;
     width: 100%;
-    padding-bottom: 190px;
   }
   .topbar {
     display: flex;
@@ -1436,18 +1463,6 @@ summary {
   }
   .components {
     font-size: 12px;
-  }
-  .plan-foot {
-    font-size: 12px;
-    align-items: center;
-    gap: 10px;
-    margin-top: 12px;
-  }
-  .plan-foot .text-button {
-    font-size: 12px;
-    gap: 5px;
-    text-align: right;
-    max-width: 220px;
   }
   .ideas {
     margin-top: 26px;
@@ -1608,28 +1623,14 @@ summary {
     min-height: 36px;
   }
   .capture-wrap {
-    left: 0;
-    bottom: 66px;
-    padding: 14px 16px 9px;
-    background: #fafaf8;
+    padding: 10px 16px 9px;
+  }
+  .capture-prompts button {
+    padding-inline: 12px;
   }
   .capture {
     padding: 7px;
-    border-radius: 10px;
     gap: 8px;
-  }
-  .capture .mic {
-    min-width: 40px;
-    min-height: 42px;
-  }
-  .capture textarea {
-    font-size: 12px;
-    min-height: 34px;
-    max-height: 80px;
-  }
-  .capture .send {
-    min-width: 35px;
-    min-height: 36px;
   }
   .capture-hint {
     font-size: 12px;
@@ -1638,15 +1639,11 @@ summary {
   .bottom-nav {
     display: flex;
     justify-content: space-around;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
     background: #fafaf8;
     border-top: 1px solid #e0e4d7;
     padding: 5px 9px max(6px, env(safe-area-inset-bottom));
-    z-index: 20;
     min-height: 66px;
+    pointer-events: auto;
   }
   .bottom-nav button {
     display: flex;
@@ -1845,9 +1842,6 @@ summary {
   margin-bottom: 28px;
   font-size: 28px;
 }
-.plan-foot > span {
-  margin-right: auto;
-}
 .capture-hint button {
   pointer-events: auto;
   min-height: 32px;
@@ -1875,12 +1869,6 @@ summary {
     align-self: center;
     padding: 8px;
   }
-  .plan-foot {
-    gap: 4px 16px;
-  }
-  .plan-foot > span {
-    flex-basis: 100%;
-  }
   .recipe-grid {
     grid-template-columns: 1fr;
     gap: 12px;
@@ -1893,9 +1881,6 @@ summary {
   }
   .offer-row > div {
     min-width: 100%;
-  }
-  .capture textarea {
-    font-size: 16px;
   }
   .bottom-nav button {
     padding: 8px;
@@ -2016,6 +2001,16 @@ summary {
   color: var(--muted);
   font-size: 12px;
   margin-top: 4px;
+}
+.schedule-help {
+  margin-top: 10px;
+  font-size: 14px;
+}
+.schedule-help .text-button {
+  padding-inline: 0;
+}
+.store-settings {
+  scroll-margin-top: 16px;
 }
 @media (max-width: 680px) {
   .recipe-tabs {

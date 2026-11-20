@@ -11,6 +11,8 @@ import {
   Trash2,
   Square,
   Settings2,
+  ShoppingBasket,
+  Utensils,
 } from "lucide-react";
 import {
   DEFAULT_MODEL,
@@ -276,6 +278,8 @@ function App() {
   const recorder = useRef<MediaRecorder | null>(null);
   const connectingRef = useRef(false);
   const codeInput = useRef<HTMLInputElement | null>(null);
+  const draftInput = useRef<HTMLTextAreaElement>(null);
+  const storesSection = useRef<HTMLElement>(null);
   const recordTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (
@@ -378,6 +382,17 @@ function App() {
     await act([{ type: "dismiss-recipe", kind: "recipes", id: recipe.id, expected: { version: recipe.version } }]);
     setModal(null);
   };
+  function insertPrompt(prompt: string) {
+    setText(prompt);
+    draftInput.current?.focus();
+  }
+  function manageStores() {
+    setSettings("household");
+    requestAnimationFrame(() => {
+      storesSection.current?.focus({ preventScroll: true });
+      storesSection.current?.scrollIntoView({ block: "start" });
+    });
+  }
   async function command() {
     if (!text.trim() || processing) return;
     setProcessing(true);
@@ -389,7 +404,7 @@ function App() {
       });
       k.setNotice(r.message);
       if (r.context) sessionStorage.setItem("onion-context", r.context);
-      if (r.completed) setText("");
+      if (r.completed) setText((draft) => (draft === text ? "" : draft));
       await k.refresh();
     } catch (e: any) {
       k.setError(e.message);
@@ -808,32 +823,6 @@ function App() {
                     </section>
                   );
                 })}
-              </div>
-              <div className="plan-foot">
-                <span>{meals.length} meals planned</span>
-                <button
-                  className="text-button"
-                  onClick={() =>
-                    quietly([
-                      { type: "groceries", data: { from: start, to: days[6] } },
-                    ])
-                  }
-                >
-                  Suggest groceries
-                </button>
-                <button
-                  className="text-button"
-                  onClick={() => {
-                    setText(
-                      "Suggest three meals for the gaps this week, using our recipes and preferences.",
-                    );
-                    document
-                      .querySelector<HTMLTextAreaElement>(".capture textarea")
-                      ?.focus();
-                  }}
-                >
-                  Suggest meals
-                </button>
               </div>
               {suggestions.length > 0 && (
                 <section className="ideas">
@@ -1401,9 +1390,14 @@ function App() {
                           </div>
                         ))}
                   </section>
-                  <section className="settings-section">
+                  <section
+                    className="settings-section store-settings"
+                    ref={storesSection}
+                    tabIndex={-1}
+                    aria-labelledby="stores-heading"
+                  >
                     <div className="section-heading">
-                      <h2>Stores</h2>
+                      <h2 id="stores-heading">Stores</h2>
                       <button onClick={() => open("stores")}>Add store</button>
                     </div>
                     {stores
@@ -1602,6 +1596,7 @@ function App() {
                     connected={ai.connected}
                     stores={stores}
                     offerJobs={state.offerJobs}
+                    onManageStores={manageStores}
                   />
                   <p className="fine">
                     Recordings are deleted after transcription.
@@ -1669,107 +1664,145 @@ function App() {
             </>
           )}
         </main>
-        <div className="capture-wrap">
-          {k.notice && (
-            <div className="toast" role="status">
-              <span>{k.notice}</span>
-              {latest && (
+        <footer className="workspace-footer">
+          <div className="capture-wrap">
+            {k.notice && (
+              <div className="toast" role="status">
+                <span>{k.notice}</span>
+                {latest && (
+                  <button
+                    onClick={() => quietly([{ type: "undo", id: latest.id }])}
+                  >
+                    Undo
+                  </button>
+                )}
                 <button
-                  onClick={() => quietly([{ type: "undo", id: latest.id }])}
+                  className="icon"
+                  aria-label="Dismiss status"
+                  onClick={() => k.setNotice("")}
                 >
-                  Undo
+                  <X size={14} />
                 </button>
-              )}
-              <button
-                className="icon"
-                aria-label="Dismiss status"
-                onClick={() => k.setNotice("")}
+              </div>
+            )}
+            {tab === "plan" && (
+              <div
+                className="capture-prompts"
+                role="group"
+                aria-label="Suggested prompts"
               >
-                <X size={14} />
+                <button
+                  type="button"
+                  onClick={() =>
+                    insertPrompt(
+                      `Suggest groceries for the meals planned from ${start} through ${days[6]}. Add them as shopping list suggestions for review.`,
+                    )
+                  }
+                >
+                  <ShoppingBasket size={17} aria-hidden="true" />
+                  Suggest groceries
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    insertPrompt(
+                      "Suggest three meals for the gaps this week, using our recipes and preferences.",
+                    )
+                  }
+                >
+                  <Utensils size={17} aria-hidden="true" />
+                  Suggest meals
+                </button>
+              </div>
+            )}
+            <div className={"capture " + (recording ? "recording" : "")}>
+              <button
+                className="mic"
+                aria-label={
+                  recording ? "Stop recording" : "Record an instruction"
+                }
+                onClick={voice}
+                disabled={transcribing}
+              >
+                {recording ? <Square size={18} /> : <Mic size={21} />}
+              </button>
+              <div className="capture-draft">
+                <div className="capture-draft-size" aria-hidden="true">
+                  {text}{" "}
+                </div>
+                <textarea
+                  ref={draftInput}
+                  rows={1}
+                  aria-label="Ask the assistant"
+                  placeholder={
+                    recording
+                      ? "Listening… tap to stop"
+                      : transcribing
+                        ? "Transcribing…"
+                        : "Ask the assistant…"
+                  }
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      command();
+                    }
+                  }}
+                />
+              </div>
+              <button
+                className="send"
+                aria-label="Send instruction"
+                disabled={!text.trim() || processing || recording}
+                onClick={command}
+              >
+                {processing ? (
+                  <span className="processing-dot" />
+                ) : (
+                  <ArrowRight size={20} />
+                )}
               </button>
             </div>
-          )}
-          <div className={"capture " + (recording ? "recording" : "")}>
-            <button
-              className="mic"
-              aria-label={
-                recording ? "Stop recording" : "Record an instruction"
-              }
-              onClick={voice}
-              disabled={transcribing}
-            >
-              {recording ? <Square size={18} /> : <Mic size={21} />}
-            </button>
-            <textarea
-              rows={1}
-              aria-label="Ask the assistant"
-              placeholder={
-                recording
-                  ? "Listening… tap to stop"
-                  : transcribing
-                    ? "Transcribing…"
-                    : "Ask the assistant…"
-              }
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  command();
-                }
-              }}
-            />
-            <button
-              className="send"
-              aria-label="Send instruction"
-              disabled={!text.trim() || processing || recording}
-              onClick={command}
-            >
-              {processing ? (
-                <span className="processing-dot" />
-              ) : (
-                <ArrowRight size={20} />
-              )}
-            </button>
+            {(recording || transcribing || !ai.connected) && (
+              <p className="capture-hint">
+                {recording ? (
+                  "Recording · 60 seconds max"
+                ) : transcribing ? (
+                  "Transcribing…"
+                ) : (
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      setTab("settings");
+                      setSettings("assistant");
+                    }}
+                  >
+                    Connect ChatGPT
+                  </button>
+                )}
+              </p>
+            )}
           </div>
-          {(recording || transcribing || !ai.connected) && (
-            <p className="capture-hint">
-              {recording ? (
-                "Recording · 60 seconds max"
-              ) : transcribing ? (
-                "Transcribing…"
-              ) : (
-                <button
-                  className="text-button"
-                  onClick={() => {
-                    setTab("settings");
-                    setSettings("assistant");
-                  }}
-                >
-                  Connect ChatGPT
-                </button>
-              )}
-            </p>
-          )}
-        </div>
-        <nav className="bottom-nav">
-          {[
-            ["plan", "Week"],
-            ["shop", "Shop"],
-            ["recipes", "Recipes"],
-            ["pantry", "Pantry"],
-            ["settings", "Settings"],
-          ].map(([id, label]) => (
-            <button
-              key={id}
-              className={tab === id ? "selected" : ""}
-              aria-current={tab === id ? "page" : undefined}
-              onClick={() => setTab(id)}
-            >
-              <span>{label}</span>
-            </button>
-          ))}
-        </nav>
+          <nav className="bottom-nav">
+            {[
+              ["plan", "Week"],
+              ["shop", "Shop"],
+              ["recipes", "Recipes"],
+              ["pantry", "Pantry"],
+              ["settings", "Settings"],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                className={tab === id ? "selected" : ""}
+                aria-current={tab === id ? "page" : undefined}
+                onClick={() => setTab(id)}
+              >
+                <span>{label}</span>
+              </button>
+            ))}
+          </nav>
+        </footer>
       </div>
       {modal && (
         <Modal

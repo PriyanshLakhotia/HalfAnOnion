@@ -14,58 +14,83 @@ export function ScheduleStatus({
   connected,
   stores,
   offerJobs,
+  onManageStores,
 }: {
   configured: boolean | undefined;
   connected: boolean;
   stores: Entity[];
   offerJobs: Record<string, any>;
+  onManageStores: () => void;
 }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30000);
     return () => clearInterval(timer);
   }, []);
+  const enabledRetailers = new Set(
+    stores.filter((store) => store.discovery).map((store) => store.chain),
+  );
+  const isPaused = (retailer: string | null) =>
+    retailer !== null && !enabledRetailers.has(retailer);
   return (
     <section className="schedule-status">
       <div className="section-heading">
         <h3>Scheduled updates</h3>
         <small className="muted">Amsterdam time</small>
       </div>
-      {configured === undefined ? <p className="muted">Loading schedules…</p> : configured ? (
-        <table>
-          <thead>
-            <tr>
-              <th>Job</th>
-              <th>Next scheduled</th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobSchedules.map((job) => {
-              const selected =
-                !job.retailer ||
-                stores.some((s) => s.chain === job.retailer && s.discovery);
-              const previous = job.retailer ? offerJobs[job.retailer] : null;
-              return (
-                <tr key={job.id}>
-                  <td>
-                    {job.label}
-                    {!selected && <small>No store enabled</small>}
-                    {selected && previous && (
-                      <small>
-                        {previous.status === "success"
-                          ? "Updated"
-                          : "Last check: " +
-                            previous.status.replaceAll("-", " ")}{" "}
-                        · {format.format(new Date(previous.checkedAt))}
-                      </small>
-                    )}
-                  </td>
-                  <td>{format.format(nextScheduledRun(job, now))}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      {configured === undefined ? (
+        <p className="muted">Loading schedules…</p>
+      ) : configured ? (
+        <>
+          <table>
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Next scheduled</th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobSchedules.map((job) => {
+                const paused = isPaused(job.retailer);
+                const previous = job.retailer ? offerJobs[job.retailer] : null;
+                return (
+                  <tr key={job.id}>
+                    <td>
+                      {job.label}
+                      {!paused && previous && (
+                        <small>
+                          {previous.status === "success"
+                            ? "Updated"
+                            : "Last check: " +
+                              previous.status.replaceAll("-", " ")}{" "}
+                          · {format.format(new Date(previous.checkedAt))}
+                        </small>
+                      )}
+                    </td>
+                    <td className={paused ? "muted" : undefined}>
+                      {paused ? "Paused" : format.format(nextScheduledRun(job, now))}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {jobSchedules.some((job) => isPaused(job.retailer)) && (
+            <div className="schedule-help">
+              <p className="muted">
+                To turn on automatic offers for a retailer, add or edit a store
+                for that retailer and check “Include in automatic offer discovery”.
+              </p>
+              <button
+                type="button"
+                className="text-button"
+                onClick={onManageStores}
+              >
+                Manage stores
+              </button>
+            </div>
+          )}
+        </>
       ) : (
         <p className="muted">Schedules are not configured.</p>
       )}
