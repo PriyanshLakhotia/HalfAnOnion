@@ -1,18 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
-  Plus,
   ArrowRight,
   ChevronLeft,
   ChevronRight,
   Check,
   X,
   Mic,
-  Trash2,
   Square,
-  Settings2,
-  ShoppingBasket,
-  Utensils,
 } from "lucide-react";
 import {
   DEFAULT_MODEL,
@@ -29,6 +24,9 @@ import {
 import { retailerRules } from "../domain/retailers";
 import { api, clearLocal, useKitchen, type Snapshot } from "./store";
 import "./style.css";
+import "./forms.css";
+import "./collections.css";
+import "./login.css";
 import { ScheduleStatus } from "./schedule-status";
 import { RecipeLibrary } from "./recipe-library";
 import { RecipeCreator } from "./recipe-creator";
@@ -109,21 +107,25 @@ function Modal({
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = React.useId();
   useEffect(() => {
-    ref.current?.showModal();
-    return () => ref.current?.close();
+    const dialog = ref.current;
+    dialog?.showModal();
+    dialog?.querySelector<HTMLElement>("[data-initial-focus]")?.focus();
+    return () => dialog?.close();
   }, []);
   return (
     <dialog
       ref={ref}
       className="sheet"
+      aria-labelledby={titleId}
       onCancel={close}
       onClick={(e) => {
         if (e.target === ref.current) close();
       }}
     >
       <header>
-        <h2>{title}</h2>
+        <h2 id={titleId}>{title}</h2>
         <button className="icon" aria-label="Close" onClick={close}>
           <X size={20} />
         </button>
@@ -132,7 +134,13 @@ function Modal({
     </dialog>
   );
 }
-function Login({ done }: { done: () => void }) {
+function Login({
+  done,
+  embedded = false,
+}: {
+  done: () => void;
+  embedded?: boolean;
+}) {
   const invite = new URLSearchParams(location.search).get("invite") ?? "";
   const [canCreate, setCanCreate] = useState(false),
     [create, setCreate] = useState(!!invite),
@@ -143,16 +151,28 @@ function Login({ done }: { done: () => void }) {
       .then((s) => setCanCreate(s.canCreate))
       .catch(() => {});
   }, []);
+  const Container = embedded ? "div" : "main";
   return (
-    <div className="login">
-      <div className="login-form">
-        <div className="brand">
-          <Onion />
-          <span>half an onion</span>
+    <Container className={embedded ? "auth-embedded" : "auth-page"}>
+      {!embedded && (
+        <div className="auth-cover">
+          <div className="auth-cover-inner">
+            <p className="auth-wordmark">Half an <em>Onion</em></p>
+            <img
+              className="auth-photo"
+              src="/onion-still-life.webp"
+              alt=""
+              width="1536"
+              height="1024"
+              fetchPriority="high"
+            />
+          </div>
         </div>
-        <h1>
-          {create ? (invite ? "Join household" : "Create account") : "Sign in"}
-        </h1>
+      )}
+      <div className="auth-form">
+        {!embedded && (
+          <h1>{create ? (invite ? "Join household" : "Create account") : "Sign in"}</h1>
+        )}
         <form
           onSubmit={async (e) => {
             e.preventDefault();
@@ -183,7 +203,10 @@ function Login({ done }: { done: () => void }) {
               />
             </Field>
           )}
-          <Field label="Username">
+          <Field
+            label="Username"
+            hint={create ? "3–30 letters, numbers or underscores." : undefined}
+          >
             <input
               name="username"
               required
@@ -221,11 +244,13 @@ function Login({ done }: { done: () => void }) {
             </p>
           )}
           <button className="primary wide" disabled={busy}>
-            {busy ? "One moment…" : create ? "Create my account" : "Sign in"}
+            {busy
+              ? create ? "Creating account…" : "Signing in…"
+              : create ? "Create my account" : "Sign in"}
           </button>
         </form>
         {!invite && (
-          <p className="login-help">
+          <div className="auth-help">
             {canCreate ? (
               <button
                 className="text-button"
@@ -235,17 +260,16 @@ function Login({ done }: { done: () => void }) {
               </button>
             ) : (
               <>
-                Use an invitation to join a household.
-                <br />
+                <p>Use an invitation to join a household.</p>
                 <a href="/signin-with-chatgpt?return_to=%2F" target="_top">
                   Owner setup with ChatGPT
                 </a>
               </>
             )}
-          </p>
+          </div>
         )}
       </div>
-    </div>
+    </Container>
   );
 }
 function App() {
@@ -293,6 +317,9 @@ function App() {
         .catch(() => {});
   }, [data?.user.id]);
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [tab]);
+  useEffect(() => {
     sessionStorage.setItem("onion-draft", text);
   }, [text]);
   useEffect(() => {
@@ -331,10 +358,10 @@ function App() {
     act(actions).catch(() => {});
   if (!k.loaded)
     return (
-      <div className="loading">
-        <Onion />
-        <p>Loading…</p>
-      </div>
+      <main className="auth-loading">
+        <p className="auth-wordmark">Half an <em>Onion</em></p>
+        <p role="status">Loading your kitchen…</p>
+      </main>
     );
   if (!data) return <Login done={() => k.refresh()} />;
   const { state, members, user } = data,
@@ -367,6 +394,10 @@ function App() {
             b.mealType,
           ),
     );
+  const openDays = days.filter(date => !meals.some(meal => meal.date === date)).length;
+  const weekLabel = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric", month: "long", year: "numeric",
+  }).formatRange(new Date(start + "T12:00:00"), new Date(days[6] + "T12:00:00"));
   const suggestions = pendingSuggestions(e.suggestions);
   const latest = [...state.activity]
     .reverse()
@@ -593,59 +624,49 @@ function App() {
   }
   return (
     <div className="app">
-      <aside className="sidebar">
-        <div className="brand">
-          <Onion />
-          <span>half an onion</span>
-        </div>
-        <p className="eyebrow kitchen-label">{data.household.name}</p>
-        <nav>
-          {[
-            ["plan", "Week"],
-            ["shop", "Shopping"],
-            ["recipes", "Recipes"],
-            ["pantry", "Pantry"],
-          ].map(([id, label]) => (
-            <button
-              key={id}
-              className={tab === id ? "nav active" : "nav"}
-              aria-current={tab === id ? "page" : undefined}
-              onClick={() => {
-                setTab(id);
-                setSearch("");
-              }}
-            >
-              <span>{label}</span>
-              {id === "shop" && pending > 0 && (
-                <span className="count">{pending}</span>
-              )}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="member-mark">
-            <span>{user.name.slice(0, 1)}</span>
-            <div>
-              <strong>{user.name}</strong>
-            </div>
+      <a className="skip-link" href="#kitchen-content">Skip to content</a>
+      <header className="masthead">
+        <div className="masthead-inner">
+          <div className="wordmark">
+            <Onion size={34} />
+            <span>Half an <i>Onion</i></span>
           </div>
+          <nav className="main-nav" aria-label="Kitchen">
+            {[
+              ["plan", "Week"],
+              ["shop", "Shopping"],
+              ["recipes", "Recipes"],
+              ["pantry", "Pantry"],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                aria-current={tab === id ? "page" : undefined}
+                onClick={() => {
+                  setTab(id);
+                  if (!window.matchMedia("(max-width: 680px)").matches) setSearch("");
+                }}
+              >
+                {label}
+                {id === "shop" && pending > 0 && <span className="count">{pending}</span>}
+              </button>
+            ))}
+          </nav>
           <button
-            className={tab === "settings" ? "nav active" : "nav"}
+            className="kitchen-account"
+            aria-label={`Settings for ${data.household.name}, signed in as ${user.name}`}
             aria-current={tab === "settings" ? "page" : undefined}
             onClick={() => setTab("settings")}
           >
-            Settings
+            <span className="account-letter" aria-hidden="true">{user.name.slice(0, 1)}</span>
+            <span className="account-copy">
+              <strong>{data.household.name}</strong>
+              <span>{user.name} · Settings</span>
+            </span>
           </button>
         </div>
-      </aside>
+      </header>
       <div className="workspace">
-        <header className="topbar">
-          <span className="mobile-brand brand">
-            <Onion size={28} />
-            half an onion
-          </span>
-        </header>
-        <main className="content">
+        <main className="content" id="kitchen-content" tabIndex={-1}>
           {(!k.online || k.pending.length > 0) && (
             <p className="sync-state" role="status">
               {!k.online
@@ -685,18 +706,23 @@ function App() {
             ))}
           {tab === "plan" && (
             <>
-              <div className="page-heading">
-                <div>
-                  <h1>A week, well fed.</h1>
+              <div className="planner-cover">
+                <div className="planner-title">
+                  <h1>Meal planner</h1>
+                  <p>
+                    {meals.length} {meals.length === 1 ? "meal" : "meals"} planned · {openDays} {openDays === 1 ? "day" : "days"} open
+                  </p>
+                  <button
+                    className="primary"
+                    onClick={() => open("meals", undefined, today())}
+                  >
+                    Add a meal
+                  </button>
                 </div>
-                <button
-                  className="primary"
-                  onClick={() => open("meals", undefined, today())}
-                >
-                  Add a meal
-                </button>
+                <img src="/onion-still-life.webp" alt="" width="1536" height="1024" />
               </div>
               <div className="week-toolbar">
+                <h2 aria-live="polite">{weekLabel}</h2>
                 <div className="date-switch">
                   <button
                     className="icon"
@@ -705,17 +731,6 @@ function App() {
                   >
                     <ChevronLeft size={20} />
                   </button>
-                  <strong>
-                    {new Date(start + "T12:00:00").toLocaleDateString("en-GB", {
-                      month: "short",
-                      day: "numeric",
-                    })}{" "}
-                    —{" "}
-                    {new Date(days[6] + "T12:00:00").toLocaleDateString(
-                      "en-GB",
-                      { month: "short", day: "numeric" },
-                    )}
-                  </strong>
                   <button
                     className="icon"
                     aria-label="Next week"
@@ -759,22 +774,14 @@ function App() {
                       })}
                     >
                       <header>
-                        <span>
+                        <span className="day-name">
                           {new Date(date + "T12:00:00").toLocaleDateString(
                             "en-GB",
                             { weekday: "short" },
                           )}
+                          {date === today() && <small>Today</small>}
                         </span>
                         <b>{Number(date.slice(-2))}</b>
-                        {daily.length > 0 && (
-                          <button
-                            className="icon day-add"
-                            aria-label={"Add meal on " + date}
-                            onClick={() => open("meals", undefined, date)}
-                          >
-                            <Plus size={16} />
-                          </button>
-                        )}
                       </header>
                       <div className="day-meals">
                         {daily.map((m) => (
@@ -811,14 +818,13 @@ function App() {
                             {m.cooked && <span className="cooked">Cooked</span>}
                           </button>
                         ))}
-                        {!daily.length && (
-                          <button
-                            className="open-day"
-                            onClick={() => open("meals", undefined, date)}
-                          >
-                            Add meal
-                          </button>
-                        )}
+                        <button
+                          className="open-day"
+                          aria-label={"Add meal on " + date}
+                          onClick={() => open("meals", undefined, date)}
+                        >
+                          Add meal
+                        </button>
                       </div>
                     </section>
                   );
@@ -887,321 +893,330 @@ function App() {
                   Add a store
                 </button>
               </div>
-              <div className="chips">
-                <button
-                  className={store === "all" ? "chip selected" : "chip"}
-                  onClick={() => setStore("all")}
-                >
-                  All stores
-                </button>
-                {stores.map((s) => (
-                  <button
-                    key={s.id}
-                    className={store === s.id ? "chip selected" : "chip"}
-                    onClick={() => setStore(s.id)}
-                  >
-                    {s.name}
-                    {s.locality && <small>{s.locality}</small>}
-                  </button>
-                ))}
-              </div>
-              <form
-                className="quick-add"
-                onSubmit={async (event) => {
-                  event.preventDefault();
-                  const form = event.currentTarget;
-                  const d = Object.fromEntries(new FormData(form));
-                  try {
-                    await act([
-                      {
-                        type: "put",
-                        kind: "items",
-                        id: crypto.randomUUID(),
-                        data: {
-                          name: String(d.name),
-                          quantity: d.quantity ? Number(d.quantity) : null,
-                          unit: d.unit,
-                          storeId: store === "all" ? "any" : store,
-                        },
-                      },
-                    ]);
-                    form.reset();
-                  } catch {}
-                }}
-              >
-                <input
-                  name="name"
-                  placeholder="Add an item"
-                  aria-label="Grocery name"
-                  required
-                  maxLength={180}
-                />
-                <input
-                  className="qty"
-                  name="quantity"
-                  type="number"
-                  step="any"
-                  min="0.01"
-                  placeholder="Qty"
-                  aria-label="Quantity"
-                />
-                <select name="unit" aria-label="Unit">
-                  {units.map((u) => (
-                    <option key={u} value={u}>
-                      {u || "unit"}
-                    </option>
-                  ))}
-                </select>
-                <button className="primary">Add</button>
-              </form>
-              {stores
-                .filter((s) => store === "all" || store === s.id)
-                .map((s) => {
-                  const list = items.filter(
-                    (i) =>
-                      i.storeId === s.id &&
-                      ["confirmed", "proposed", "purchased"].includes(
-                        i.status,
-                      ) &&
-                      !(
-                        i.status === "proposed" &&
-                        i.expiresOn &&
-                        i.expiresOn < today()
-                      ),
-                  );
-                  if (!list.length) return null;
-                  return (
-                    <section className="shopping-group" key={s.id}>
-                      <div className="section-heading">
-                        <h2>
-                          {s.name}
-                          <small>{s.locality}</small>
-                        </h2>
-                        <span className="muted">
-                          {list.filter((i) => i.status === "confirmed").length}{" "}
-                          to get
-                        </span>
-                      </div>
-                      {["confirmed", "proposed", "purchased"].map((status) => {
-                        const group = list.filter((i) => i.status === status);
-                        return (
-                          group.length > 0 && (
-                            <div
-                              key={status}
-                              className={
-                                status === "proposed" ? "proposal-group" : ""
-                              }
-                            >
-                              {status === "proposed" && (
-                                <p className="proposal-label">
-                                  Suggested · awaiting approval
-                                </p>
-                              )}
-                              {status === "purchased" && (
-                                <p className="purchased-label">Purchased</p>
-                              )}
-                              {group.map((i) => (
-                                <div
-                                  className={"item-row " + status}
-                                  key={i.id}
-                                >
-                                  {status !== "proposed" && (
-                                    <button
-                                      className={
-                                        "checkbox " +
-                                        (status === "purchased"
-                                          ? "checked"
-                                          : "")
-                                      }
-                                      aria-label={
-                                        (status === "purchased"
-                                          ? "Unmark "
-                                          : "Mark purchased ") + i.name
-                                      }
-                                      onClick={() =>
-                                        quietly([
-                                          {
-                                            type: "purchase",
-                                            kind: "items",
-                                            id: i.id,
-                                            expected: { status: i.status },
-                                            data: {
-                                              purchased: status !== "purchased",
-                                            },
-                                          },
-                                        ])
-                                      }
-                                    >
-                                      {status === "purchased" && (
-                                        <Check size={16} />
-                                      )}
-                                    </button>
-                                  )}
-                                  <button
-                                    className="item-name"
-                                    onClick={() => open("items", i)}
-                                  >
-                                    <strong>
-                                      {i.name}
-                                      {i.brand && <small> · {i.brand}</small>}
-                                    </strong>
-                                    {i.variant && <span>{i.variant}</span>}
-                                    {status === "proposed" && (
-                                      <span>
-                                        {i.notes || "From your meal plan"}
-                                      </span>
-                                    )}
-                                    {i.offerId && e.offers[i.offerId] && (
-                                      <span>
-                                        {activeOffer(e.offers[i.offerId])
-                                          ? e.offers[i.offerId].terms
-                                          : "Offer ended · item kept"}
-                                      </span>
-                                    )}
-                                  </button>
-                                  <span className="quantity">
-                                    {i.quantity ?? ""} {i.unit}
-                                  </span>
-                                  {status === "proposed" ? (
-                                    <div className="proposal-actions">
-                                      <button
-                                        onClick={() =>
-                                          quietly([
-                                            {
-                                              type: "accept",
-                                              kind: "items",
-                                              id: i.id,
-                                            },
-                                          ])
-                                        }
-                                      >
-                                        Add to list
-                                      </button>
-                                      <button
-                                        className="icon"
-                                        aria-label={
-                                          "Dismiss suggestion " + i.name
-                                        }
-                                        onClick={() =>
-                                          quietly([
-                                            {
-                                              type: "dismiss",
-                                              kind: "items",
-                                              id: i.id,
-                                            },
-                                          ])
-                                        }
-                                      >
-                                        <X size={17} />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <button
-                                      className="icon subtle"
-                                      aria-label={"Edit " + i.name}
-                                      onClick={() => open("items", i)}
-                                    >
-                                      <Settings2 size={16} />
-                                    </button>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )
-                        );
-                      })}
-                    </section>
-                  );
-                })}
-              {!items.some(
-                (i) =>
-                  (store === "all" || i.storeId === store) &&
-                  ["confirmed", "proposed", "purchased"].includes(i.status),
-              ) && <Empty title="No items on your list." />}
-              <section className="offers-block">
-                <div className="section-heading">
-                  <h2>Store offers</h2>
-                </div>
-                {entries(e.offers)
-                  .filter(
-                    (o) =>
-                      activeOffer(o) &&
-                      stores.some((s) => s.chain === o.retailer),
-                  )
-                  .map((o) => (
-                    <div className="offer-row" key={o.id}>
-                      <div>
-                        <strong>{o.name}</strong>
-                        <p>
-                          {o.terms} · {o.retailer}
-                        </p>
-                        <small>
-                          {o.start} — {o.end}
-                          {o.loyalty ? " · " + o.loyalty : ""}
-                          {o.activation ? " · " + o.activation : ""}
-                        </small>
-                      </div>
-                      <a href={o.sourceUrl} target="_blank" rel="noreferrer">
-                        Source
-                      </a>
+              <div className="shopping-layout">
+                <div className="shopping-list">
+                  <div className="store-filter" role="group" aria-label="Filter by store">
+                    <button
+                      aria-pressed={store === "all"}
+                      onClick={() => setStore("all")}
+                    >
+                      All stores
+                    </button>
+                    {stores.map((s) => (
                       <button
-                        onClick={() =>
-                          quietly([
-                            {
-                              type: "put",
-                              kind: "items",
-                              id: crypto.randomUUID(),
-                              data: {
-                                name: o.name,
-                                variant: o.variant,
-                                storeId:
-                                  stores.find((s) => s.chain === o.retailer)
-                                    ?.id ?? "any",
-                                offerId: o.id,
-                                notes: o.terms,
-                              },
-                            },
-                          ])
-                        }
+                        key={s.id}
+                        aria-pressed={store === s.id}
+                        onClick={() => setStore(s.id)}
                       >
-                        Add to list
+                        <span>{s.name}</span>
+                        {s.locality && <small>{s.locality}</small>}
                       </button>
-                    </div>
-                  ))}
-                {!entries(e.offers).some((o) => activeOffer(o)) && (
-                  <p className="muted">No current offers.</p>
-                )}
-                <details>
-                  <summary>Offer sources & freshness</summary>
-                  {Object.entries(retailerRules)
-                    .filter(([chain]) =>
-                      stores.some((s) => s.chain === chain && s.discovery),
+                    ))}
+                  </div>
+                  <form
+                    className="quick-add"
+                    onSubmit={async (event) => {
+                      event.preventDefault();
+                      const form = event.currentTarget;
+                      const d = Object.fromEntries(new FormData(form));
+                      try {
+                        await act([
+                          {
+                            type: "put",
+                            kind: "items",
+                            id: crypto.randomUUID(),
+                            data: {
+                              name: String(d.name),
+                              quantity: d.quantity ? Number(d.quantity) : null,
+                              unit: d.unit,
+                              storeId: store === "all" ? "any" : store,
+                            },
+                          },
+                        ]);
+                        form.reset();
+                      } catch {}
+                    }}
+                  >
+                    <input
+                      name="name"
+                      placeholder="Add an item"
+                      aria-label="Grocery name"
+                      required
+                      maxLength={180}
+                    />
+                    <input
+                      className="qty"
+                      name="quantity"
+                      type="number"
+                      step="any"
+                      min="0.01"
+                      placeholder="Qty"
+                      aria-label="Quantity"
+                    />
+                    <select name="unit" aria-label="Unit">
+                      {units.map((u) => (
+                        <option key={u} value={u}>
+                          {u || "unit"}
+                        </option>
+                      ))}
+                    </select>
+                    <button className="primary">Add</button>
+                  </form>
+                  {stores
+                    .filter((s) => store === "all" || store === s.id)
+                    .map((s) => {
+                      const list = items.filter(
+                        (i) =>
+                          i.storeId === s.id &&
+                          ["confirmed", "proposed", "purchased"].includes(
+                            i.status,
+                          ) &&
+                          !(
+                            i.status === "proposed" &&
+                            i.expiresOn &&
+                            i.expiresOn < today()
+                          ),
+                      );
+                      if (!list.length) return null;
+                      return (
+                        <section className="shopping-group" key={s.id}>
+                          <div className="section-heading">
+                            <h2>
+                              {s.name}
+                              <small>{s.locality}</small>
+                            </h2>
+                            <span className="muted">
+                              {list.filter((i) => i.status === "confirmed").length}{" "}
+                              to get
+                            </span>
+                          </div>
+                          {["confirmed", "proposed", "purchased"].map((status) => {
+                            const group = list.filter((i) => i.status === status);
+                            return (
+                              group.length > 0 && (
+                                <div
+                                  key={status}
+                                  className={
+                                    status === "proposed" ? "proposal-group" : ""
+                                  }
+                                >
+                                  {status === "proposed" && (
+                                    <p className="proposal-label">
+                                      Suggested · awaiting approval
+                                    </p>
+                                  )}
+                                  {status === "purchased" && (
+                                    <p className="purchased-label">Purchased</p>
+                                  )}
+                                  {group.map((i) => (
+                                    <div
+                                      className={"item-row " + status}
+                                      key={i.id}
+                                    >
+                                      {status !== "proposed" && (
+                                        <button
+                                          className={
+                                            "checkbox " +
+                                            (status === "purchased"
+                                              ? "checked"
+                                              : "")
+                                          }
+                                          aria-pressed={status === "purchased"}
+                                          aria-label={
+                                            (status === "purchased"
+                                              ? "Unmark "
+                                              : "Mark purchased ") + i.name
+                                          }
+                                          onClick={() =>
+                                            quietly([
+                                              {
+                                                type: "purchase",
+                                                kind: "items",
+                                                id: i.id,
+                                                expected: { status: i.status },
+                                                data: {
+                                                  purchased: status !== "purchased",
+                                                },
+                                              },
+                                            ])
+                                          }
+                                        >
+                                          {status === "purchased" && (
+                                            <Check size={16} />
+                                          )}
+                                        </button>
+                                      )}
+                                      <button
+                                        className="item-name"
+                                        onClick={() => open("items", i)}
+                                      >
+                                        <strong>
+                                          {i.name}
+                                          {i.brand && <small> · {i.brand}</small>}
+                                        </strong>
+                                        {i.variant && <span>{i.variant}</span>}
+                                        {status === "proposed" && (
+                                          <span>
+                                            {i.notes || "From your meal plan"}
+                                          </span>
+                                        )}
+                                        {i.offerId && e.offers[i.offerId] && (
+                                          <span>
+                                            {activeOffer(e.offers[i.offerId])
+                                              ? e.offers[i.offerId].terms
+                                              : "Offer ended · item kept"}
+                                          </span>
+                                        )}
+                                      </button>
+                                      <span className="quantity">
+                                        {i.quantity ?? ""} {i.unit}
+                                      </span>
+                                      {status === "proposed" ? (
+                                        <div className="proposal-actions">
+                                          <button
+                                            onClick={() =>
+                                              quietly([
+                                                {
+                                                  type: "accept",
+                                                  kind: "items",
+                                                  id: i.id,
+                                                },
+                                              ])
+                                            }
+                                          >
+                                            Add to list
+                                          </button>
+                                          <button
+                                            className="text-button"
+                                            aria-label={
+                                              "Dismiss suggestion " + i.name
+                                            }
+                                            onClick={() =>
+                                              quietly([
+                                                {
+                                                  type: "dismiss",
+                                                  kind: "items",
+                                                  id: i.id,
+                                                },
+                                              ])
+                                            }
+                                          >
+                                            Dismiss
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          className="text-button edit-item"
+                                          aria-label={"Edit " + i.name}
+                                          onClick={() => open("items", i)}
+                                        >
+                                          Edit
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )
+                            );
+                          })}
+                        </section>
+                      );
+                    })}
+                  {!items.some(
+                    (i) =>
+                      (store === "all" || i.storeId === store) &&
+                      ["confirmed", "proposed", "purchased"].includes(i.status) &&
+                      !(i.status === "proposed" && i.expiresOn && i.expiresOn < today()),
+                  ) && <Empty title="No items on your list." />}
+                </div>
+                <aside className="offers-block" aria-labelledby="store-offers-heading">
+                  <div className="section-heading">
+                    <h2 id="store-offers-heading">Store offers</h2>
+                  </div>
+                  {entries(e.offers)
+                    .filter(
+                      (o) =>
+                        activeOffer(o) &&
+                        stores.some((s) => s.chain === o.retailer),
                     )
-                    .map(([chain, rule]) => (
-                      <div className="source-status" key={chain}>
-                        <strong>{rule.name}</strong>
-                        <p>
-                          {rule.publication} ·{" "}
-                          {rule.confidence.replace("-", " ")}
-                        </p>
-                        <small>
-                          {state.offerJobs[chain]
-                            ? state.offerJobs[chain].status +
-                              " · checked " +
-                              new Date(
-                                state.offerJobs[chain].checkedAt,
-                              ).toLocaleString("en-GB", {
-                                timeZone: "Europe/Amsterdam",
-                              })
-                            : "Waiting for the first scheduled collection"}
-                        </small>
-                        <a href={rule.source} target="_blank" rel="noreferrer">
-                          Schedule evidence
+                    .map((o) => (
+                      <div className="offer-row" key={o.id}>
+                        <div>
+                          <strong>{o.name}</strong>
+                          <p>
+                            {o.terms} · {o.retailer}
+                          </p>
+                          <small>
+                            {o.start} — {o.end}
+                            {o.loyalty ? " · " + o.loyalty : ""}
+                            {o.activation ? " · " + o.activation : ""}
+                          </small>
+                        </div>
+                        <a href={o.sourceUrl} target="_blank" rel="noreferrer">
+                          Source
                         </a>
+                        <button
+                          onClick={() =>
+                            quietly([
+                              {
+                                type: "put",
+                                kind: "items",
+                                id: crypto.randomUUID(),
+                                data: {
+                                  name: o.name,
+                                  variant: o.variant,
+                                  storeId:
+                                    stores.find((s) => s.chain === o.retailer)
+                                      ?.id ?? "any",
+                                  offerId: o.id,
+                                  notes: o.terms,
+                                },
+                              },
+                            ])
+                          }
+                        >
+                          Add to list
+                        </button>
                       </div>
                     ))}
-                </details>
-              </section>
+                  {!entries(e.offers).some((o) =>
+                    activeOffer(o) && stores.some((s) => s.chain === o.retailer),
+                  ) && <p className="muted">No current offers.</p>}
+                  <details>
+                    <summary>Offer sources and updates</summary>
+                    {!stores.some((s) => s.discovery && Object.hasOwn(retailerRules, s.chain)) && (
+                      <p className="source-empty">No stores have automatic offers enabled.</p>
+                    )}
+                    {Object.entries(retailerRules)
+                      .filter(([chain]) =>
+                        stores.some((s) => s.chain === chain && s.discovery),
+                      )
+                      .map(([chain, rule]) => (
+                        <div className="source-status" key={chain}>
+                          <strong>{rule.name}</strong>
+                          <p>
+                            {rule.publication} ·{" "}
+                            {rule.confidence.replace("-", " ")}
+                          </p>
+                          <small>
+                            {state.offerJobs[chain]
+                              ? state.offerJobs[chain].status +
+                                " · checked " +
+                                new Date(
+                                  state.offerJobs[chain].checkedAt,
+                                ).toLocaleString("en-GB", {
+                                  timeZone: "Europe/Amsterdam",
+                                })
+                              : "Waiting for the first scheduled collection"}
+                          </small>
+                          <a href={rule.source} target="_blank" rel="noreferrer">
+                            Schedule evidence
+                          </a>
+                        </div>
+                      ))}
+                  </details>
+                </aside>
+              </div>
             </>
           )}
           {tab === "recipes" && (
@@ -1229,57 +1244,59 @@ function App() {
                   Add a staple
                 </button>
               </div>
-              {pantry.length ? (
-                pantry.map((p) => (
-                  <div className="pantry-row" key={p.id}>
-                    <button
-                      className="item-name"
-                      onClick={() => open("pantry", p)}
-                    >
-                      <strong>{p.name}</strong>
-                      <span>
-                        {p.confirmedAt
-                          ? "Checked " +
-                            new Date(p.confirmedAt).toLocaleDateString(
-                              "en-GB",
-                              { month: "short", day: "numeric" },
-                            )
-                          : "Usual staple · availability unknown"}
-                      </span>
-                    </button>
-                    <div className="segmented">
-                      {["have", "low", "out", "usual"].map((status) => (
-                        <button
-                          key={status}
-                          className={p.state === status ? "selected" : ""}
-                          onClick={() =>
-                            quietly([
-                              {
-                                type: "patch",
-                                kind: "pantry",
-                                id: p.id,
-                                expected: { state: p.state },
-                                data: {
-                                  state: status,
-                                  confirmedAt:
-                                    status === "usual" ? null : Date.now(),
+              <div className="pantry-list">
+                {pantry.length ? (
+                  pantry.map((p) => (
+                    <div className="pantry-row" key={p.id}>
+                      <button
+                        className="item-name"
+                        onClick={() => open("pantry", p)}
+                      >
+                        <strong>{p.name}</strong>
+                        <span>
+                          {p.confirmedAt
+                            ? "Checked " +
+                              new Date(p.confirmedAt).toLocaleDateString(
+                                "en-GB",
+                                { month: "short", day: "numeric" },
+                              )
+                            : "Usual staple · availability unknown"}
+                        </span>
+                      </button>
+                      <div className="stock-control" role="group" aria-label={"Stock of " + p.name}>
+                        {["have", "low", "out", "usual"].map((status) => (
+                          <button
+                            key={status}
+                            aria-pressed={p.state === status}
+                            onClick={() =>
+                              quietly([
+                                {
+                                  type: "patch",
+                                  kind: "pantry",
+                                  id: p.id,
+                                  expected: { state: p.state },
+                                  data: {
+                                    state: status,
+                                    confirmedAt:
+                                      status === "usual" ? null : Date.now(),
+                                  },
                                 },
-                              },
-                            ])
-                          }
-                        >
-                          {titleCase(status)}
-                        </button>
-                      ))}
+                              ])
+                            }
+                          >
+                            {titleCase(status)}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))
-              ) : (
-                <Empty title="No pantry items." />
-              )}
-              <p className="quiet-note">
-                “Have” stays current for 3 days. “Usual” doesn’t confirm stock.
-              </p>
+                  ))
+                ) : (
+                  <Empty title="No pantry items." />
+                )}
+                <p className="quiet-note">
+                  “Have” confirms stock for 3 days. “Usual” records a regular purchase without confirming stock.
+                </p>
+              </div>
             </>
           )}
           {tab === "settings" && (
@@ -1289,378 +1306,383 @@ function App() {
                   <h1>Settings</h1>
                 </div>
               </div>
-              <div className="chips">
-                {["household", "preferences", "assistant", "data"].map((s) => (
-                  <button
-                    className={settings === s ? "chip selected" : "chip"}
-                    key={s}
-                    onClick={() => setSettings(s)}
-                  >
-                    {titleCase(s)}
-                  </button>
-                ))}
-              </div>
-              {settings === "household" && (
-                <>
-                  <section className="settings-section">
-                    <h2>Members</h2>
-                    {members.map((m) => (
-                      <div className="member-row" key={m.id}>
-                        <span className="avatar">{m.name.slice(0, 1)}</span>
-                        <div>
-                          <strong>{m.name}</strong>
-                          <small>
-                            {titleCase(m.profile.diet)}
-                            {m.role === "owner" ? " · Owner" : ""}
-                          </small>
-                        </div>
-                        {m.id === user.id && (
-                          <button onClick={() => open("profile")}>
-                            My profile
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    {user.role === "owner" && (
-                      <div className="invite-box">
-                        <div>
-                          <strong>Invite a member</strong>
-                          <p>Single-use invitation. Expires after 48 hours.</p>
-                        </div>
-                        <button
-                          onClick={async () => {
-                            try {
-                              setInvite((await api("/api/invites", {})).url);
-                            } catch (e: any) {
-                              k.setError(e.message);
-                            }
-                          }}
-                        >
-                          Create invite
-                        </button>
-                        {invite && (
-                          <Field label="Share this invitation">
-                            <input
-                              readOnly
-                              value={invite}
-                              onFocus={(e) => e.target.select()}
-                            />
-                            <button
-                              onClick={() =>
-                                navigator.clipboard
-                                  .writeText(invite)
-                                  .then(() => k.setNotice("Invitation copied"))
-                              }
-                            >
-                              Copy link
-                            </button>
-                          </Field>
-                        )}
-                      </div>
-                    )}
-                    {user.role === "owner" &&
-                      invitations
-                        .filter(
-                          (i) =>
-                            !i.revoked &&
-                            !i.used_by &&
-                            i.expires_at > Date.now(),
-                        )
-                        .map((i) => (
-                          <div className="setting-row" key={i.hash}>
-                            <small>
-                              Invitation · expires{" "}
-                              {new Date(i.expires_at).toLocaleDateString(
-                                "en-GB",
-                              )}
-                            </small>
+              <div className="settings-layout">
+                <nav className="settings-menu" aria-label="Settings sections">
+                  {["household", "preferences", "assistant", "data"].map((s) => (
+                    <button
+                      aria-current={settings === s ? "page" : undefined}
+                      key={s}
+                      onClick={() => setSettings(s)}
+                    >
+                      {titleCase(s)}
+                    </button>
+                  ))}
+                </nav>
+                <div className="settings-body">
+                  {settings === "household" && (
+                    <>
+                      <section className="settings-section">
+                        <h2>Members</h2>
+                        {members.map((m) => (
+                          <div className="member-row" key={m.id}>
+                            <div>
+                              <strong>{m.name}</strong>
+                              <small>
+                                {titleCase(m.profile.diet)}
+                                {m.role === "owner" ? " · Owner" : ""}
+                              </small>
+                            </div>
+                            {m.id === user.id && (
+                              <button onClick={() => open("profile")}>
+                                My profile
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {user.role === "owner" && (
+                          <div className="invite-box">
+                            <div>
+                              <strong>Invite a member</strong>
+                              <p>The link works once and expires in 48 hours.</p>
+                            </div>
                             <button
                               onClick={async () => {
                                 try {
-                                  await api("/api/invites", { revoke: i.hash });
-                                  setInvitations(await api("/api/invites"));
-                                  setInvite("");
+                                  setInvite((await api("/api/invites", {})).url);
                                 } catch (e: any) {
                                   k.setError(e.message);
                                 }
                               }}
                             >
-                              Revoke
+                              Create invite
                             </button>
+                            {invite && (
+                              <div className="invite-link">
+                                <Field label="Share this invitation">
+                                  <input
+                                    readOnly
+                                    value={invite}
+                                    onFocus={(e) => e.target.select()}
+                                  />
+                                </Field>
+                                <button
+                                  onClick={() =>
+                                    navigator.clipboard
+                                      .writeText(invite)
+                                      .then(() => k.setNotice("Invitation copied"))
+                                  }
+                                >
+                                  Copy link
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        ))}
-                  </section>
-                  <section
-                    className="settings-section store-settings"
-                    ref={storesSection}
-                    tabIndex={-1}
-                    aria-labelledby="stores-heading"
-                  >
-                    <div className="section-heading">
-                      <h2 id="stores-heading">Stores</h2>
-                      <button onClick={() => open("stores")}>Add store</button>
-                    </div>
-                    {stores
-                      .filter((s) => s.id !== "any")
-                      .map((s) => (
-                        <div className="setting-row" key={s.id}>
-                          <div>
-                            <strong>{s.name}</strong>
-                            <small>
-                              {s.locality || s.chain}
-                              {s.name.toLowerCase().includes("bahar")
-                                ? " · Shopping only"
-                                : s.discovery
-                                  ? " · Offer discovery enabled"
-                                  : ""}
-                            </small>
-                          </div>
-                          <button onClick={() => open("stores", s)}>
-                            Edit
+                        )}
+                        {user.role === "owner" &&
+                          invitations
+                            .filter(
+                              (i) =>
+                                !i.revoked &&
+                                !i.used_by &&
+                                i.expires_at > Date.now(),
+                            )
+                            .map((i) => (
+                              <div className="setting-row" key={i.hash}>
+                                <small>
+                                  Invitation · expires{" "}
+                                  {new Date(i.expires_at).toLocaleDateString(
+                                    "en-GB",
+                                  )}
+                                </small>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await api("/api/invites", { revoke: i.hash });
+                                      setInvitations(await api("/api/invites"));
+                                      setInvite("");
+                                    } catch (e: any) {
+                                      k.setError(e.message);
+                                    }
+                                  }}
+                                >
+                                  Revoke
+                                </button>
+                              </div>
+                            ))}
+                      </section>
+                      <section
+                        className="settings-section store-settings"
+                        ref={storesSection}
+                        tabIndex={-1}
+                        aria-labelledby="stores-heading"
+                      >
+                        <div className="section-heading">
+                          <h2 id="stores-heading">Stores</h2>
+                          <button onClick={() => open("stores")}>Add store</button>
+                        </div>
+                        {stores
+                          .filter((s) => s.id !== "any")
+                          .map((s) => (
+                            <div className="setting-row" key={s.id}>
+                              <div>
+                                <strong>{s.name}</strong>
+                                <small>
+                                  {s.locality || s.chain}
+                                  {s.name.toLowerCase().includes("bahar")
+                                    ? " · Shopping only"
+                                    : s.discovery
+                                      ? " · Offer discovery enabled"
+                                      : ""}
+                                </small>
+                              </div>
+                              <button onClick={() => open("stores", s)}>
+                                Edit
+                              </button>
+                            </div>
+                          ))}
+                      </section>
+                      <section className="settings-section">
+                        <h2>Your account</h2>
+                        <div className="setting-row">
+                          <span>@{user.username}</span>
+                          <button onClick={() => open("password")}>
+                            Change password
                           </button>
                         </div>
-                      ))}
-                  </section>
-                  <section className="settings-section">
-                    <h2>Your account</h2>
-                    <div className="setting-row">
-                      <span>@{user.username}</span>
-                      <button onClick={() => open("password")}>
-                        Change password
-                      </button>
-                    </div>
-                    <button
-                      className="text-button"
-                      onClick={async () => {
-                        if (
-                          k.pending.length &&
-                          !confirm(
-                            "Some changes are waiting to sync. Signing out removes them from this device. Continue?",
-                          )
-                        )
-                          return;
-                        await api("/api/auth/logout", {});
-                        await clearLocal();
-                        location.reload();
-                      }}
-                    >
-                      Sign out
-                    </button>
-                  </section>
-                </>
-              )}
-              {settings === "preferences" && (
-                <section className="settings-section">
-                  <div className="section-heading">
-                    <h2>Preferences</h2>
-                    <button onClick={() => open("memories")}>
-                      Add preference
-                    </button>
-                  </div>
-                  <p className="muted">Manage allergies in your profile.</p>
-                  {memories.length ? (
-                    memories.map((m) => (
-                      <div className="memory-row" key={m.id}>
-                        <div>
-                          <strong>{m.fact}</strong>
-                          <small>
-                            {m.scope === "household"
-                              ? "Household"
-                              : members.find((p) => p.id === m.scope)
-                                  ?.name}{" "}
-                            ·{" "}
-                            {m.kind === "explicit"
-                              ? "You told us"
-                              : "Tentative pattern"}
-                            {m.provenance ? " · " + m.provenance : ""}
-                          </small>
-                        </div>
-                        <button onClick={() => open("memories", m)}>
-                          Edit
-                        </button>
                         <button
                           className="text-button"
-                          onClick={() =>
-                            quietly([
-                              { type: "forget", kind: "memories", id: m.id },
-                            ])
-                          }
+                          onClick={async () => {
+                            if (
+                              k.pending.length &&
+                              !confirm(
+                                "Some changes are waiting to sync. Signing out removes them from this device. Continue?",
+                              )
+                            )
+                              return;
+                            await api("/api/auth/logout", {});
+                            await clearLocal();
+                            location.reload();
+                          }}
                         >
-                          Forget
+                          Sign out
+                        </button>
+                      </section>
+                    </>
+                  )}
+                  {settings === "preferences" && (
+                    <section className="settings-section">
+                      <div className="section-heading">
+                        <h2>Preferences</h2>
+                        <button onClick={() => open("memories")}>
+                          Add preference
                         </button>
                       </div>
-                    ))
-                  ) : (
-                    <Empty title="No saved preferences." />
-                  )}
-                </section>
-              )}
-              {settings === "assistant" && (
-                <section className="settings-section">
-                  <h2>Assistant</h2>
-                  <div className="setting-row">
-                    <div>
-                      <strong>
-                        {ai.connected
-                          ? "ChatGPT connected"
-                          : "ChatGPT not connected"}
-                      </strong>
-                      <small>
-                        {ai.available
-                          ? "Available to the household"
-                          : (ai.error ?? "Assistant unavailable")}
-                      </small>
-                    </div>
-                    {user.role === "owner" && (
-                      <button
-                        disabled={connecting && !signIn}
-                        onClick={connectAssistant}
-                      >
-                        {connecting
-                          ? signIn
-                            ? "Show sign-in code"
-                            : "Starting sign-in…"
-                          : ai.connected
-                            ? "Disconnect"
-                            : ai.login_pending
-                              ? "Resume sign-in"
-                              : "Connect ChatGPT"}
-                      </button>
-                    )}
-                  </div>
-                  <Field label="Model">
-                    <select
-                      value={state.model}
-                      disabled={user.role !== "owner" || !models.length}
-                      onChange={(event) => {
-                        const next = models.find(m => m.model === event.target.value);
-                        if (!next) return;
-                        const reasoning = next.supportedReasoningEfforts.some(r => r.reasoningEffort === state.reasoning)
-                          ? state.reasoning : next.defaultReasoningEffort;
-                        quietly([{ type: "settings", data: { model: next.model, reasoning } }]);
-                      }}
-                    >
-                      {!selectedModel && <option value={state.model}>
-                        {state.model}{models.length ? " (unavailable)" : ""}
-                      </option>}
-                      {models.map(m => (
-                        <option key={m.model} value={m.model}>
-                          {m.displayName || m.model}{m.model === DEFAULT_MODEL ? " (default)" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Thinking">
-                    <select
-                      value={state.reasoning}
-                      disabled={user.role !== "owner" || !thinkingLevels.length}
-                      onChange={(event) =>
-                        quietly([
-                          {
-                            type: "settings",
-                            data: {
-                              model: state.model,
-                              reasoning: event.target.value,
-                            },
-                          },
-                        ])
-                      }
-                    >
-                      {!thinkingLevels.some(r => r.reasoningEffort === state.reasoning) && (
-                        <option value={state.reasoning}>
-                          {titleCase(state.reasoning)}{thinkingLevels.length ? " (unavailable)" : ""}
-                        </option>
+                      <p className="muted">Manage allergies in your profile.</p>
+                      {memories.length ? (
+                        memories.map((m) => (
+                          <div className="memory-row" key={m.id}>
+                            <div>
+                              <strong>{m.fact}</strong>
+                              <small>
+                                {m.scope === "household"
+                                  ? "Household"
+                                  : members.find((p) => p.id === m.scope)
+                                      ?.name}{" "}
+                                ·{" "}
+                                {m.kind === "explicit"
+                                  ? "You told us"
+                                  : "Tentative pattern"}
+                                {m.provenance ? " · " + m.provenance : ""}
+                              </small>
+                            </div>
+                            <button onClick={() => open("memories", m)}>
+                              Edit
+                            </button>
+                            <button
+                              className="text-button"
+                              onClick={() =>
+                                quietly([
+                                  { type: "forget", kind: "memories", id: m.id },
+                                ])
+                              }
+                            >
+                              Forget
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <Empty title="No saved preferences." />
                       )}
-                      {thinkingLevels.map(r => (
-                        <option
-                          key={r.reasoningEffort}
-                          value={r.reasoningEffort}
-                        >
-                          {titleCase(r.reasoningEffort)}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <div className="setting-row">
-                    <div>
-                      <strong>Voice input</strong>
-                      <small>
-                        {ai.transcription
-                          ? "Voice transcription ready"
-                          : "Available when the assistant service is connected"}
-                      </small>
-                    </div>
-                  </div>
-                  <ScheduleStatus
-                    configured={ai.schedules}
-                    connected={ai.connected}
-                    stores={stores}
-                    offerJobs={state.offerJobs}
-                    onManageStores={manageStores}
-                  />
-                  <p className="fine">
-                    Recordings are deleted after transcription.
-                  </p>
-                </section>
-              )}
-              {settings === "data" && (
-                <>
-                  <section className="settings-section">
-                    <h2>Data</h2>
-                    <div className="setting-row">
-                      <div>
-                        <strong>Export data</strong>
-                        <small>
-                          Meals, recipes, lists, pantry and preferences.
-                        </small>
+                    </section>
+                  )}
+                  {settings === "assistant" && (
+                    <section className="settings-section">
+                      <h2>Assistant</h2>
+                      <div className="setting-row">
+                        <div>
+                          <strong>
+                            {ai.connected
+                              ? "ChatGPT connected"
+                              : "ChatGPT not connected"}
+                          </strong>
+                          <small>
+                            {ai.available
+                              ? "Available to the household"
+                              : (ai.error ?? "Assistant unavailable")}
+                          </small>
+                        </div>
+                        {user.role === "owner" && (
+                          <button
+                            disabled={connecting && !signIn}
+                            onClick={connectAssistant}
+                          >
+                            {connecting
+                              ? signIn
+                                ? "Show sign-in code"
+                                : "Starting sign-in…"
+                              : ai.connected
+                                ? "Disconnect"
+                                : ai.login_pending
+                                  ? "Resume sign-in"
+                                  : "Connect ChatGPT"}
+                          </button>
+                        )}
                       </div>
-                      <a className="button" href="/api/export" download>
-                        Export JSON
-                      </a>
-                    </div>
-                    <div className="setting-row">
-                      <div>
-                        <strong>Recent activity</strong>
-                        <small>
-                          Kept for 30 days. Clearing it keeps your preferences.
-                        </small>
+                      <div className="model-fields">
+                        <Field label="Model">
+                          <select
+                            value={state.model}
+                            disabled={user.role !== "owner" || !models.length}
+                            onChange={(event) => {
+                              const next = models.find(m => m.model === event.target.value);
+                              if (!next) return;
+                              const reasoning = next.supportedReasoningEfforts.some(r => r.reasoningEffort === state.reasoning)
+                                ? state.reasoning : next.defaultReasoningEffort;
+                              quietly([{ type: "settings", data: { model: next.model, reasoning } }]);
+                            }}
+                          >
+                            {!selectedModel && <option value={state.model}>
+                              {state.model}{models.length ? " (unavailable)" : ""}
+                            </option>}
+                            {models.map(m => (
+                              <option key={m.model} value={m.model}>
+                                {m.displayName || m.model}{m.model === DEFAULT_MODEL ? " (default)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label="Thinking">
+                          <select
+                            value={state.reasoning}
+                            disabled={user.role !== "owner" || !thinkingLevels.length}
+                            onChange={(event) =>
+                              quietly([
+                                {
+                                  type: "settings",
+                                  data: {
+                                    model: state.model,
+                                    reasoning: event.target.value,
+                                  },
+                                },
+                              ])
+                            }
+                          >
+                            {!thinkingLevels.some(r => r.reasoningEffort === state.reasoning) && (
+                              <option value={state.reasoning}>
+                                {titleCase(state.reasoning)}{thinkingLevels.length ? " (unavailable)" : ""}
+                              </option>
+                            )}
+                            {thinkingLevels.map(r => (
+                              <option
+                                key={r.reasoningEffort}
+                                value={r.reasoningEffort}
+                              >
+                                {titleCase(r.reasoningEffort)}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
                       </div>
-                      <button
-                        onClick={() => {
-                          if (
-                            confirm(
-                              "Clear recent activity and undo history for the household?",
-                            )
-                          )
-                            quietly([{ type: "clear-history" }]);
-                        }}
-                      >
-                        Clear history
-                      </button>
-                    </div>
-                    {user.role === "owner" && (
-                      <button
-                        className="danger text-button"
-                        onClick={() => open("delete-household")}
-                      >
-                        Delete household data
-                      </button>
-                    )}
-                  </section>
-                  <section className="settings-section">
-                    <h2>Install app</h2>
-                    <p className="muted">
-                      iPhone: Safari → Share → Add to Home Screen.
-                      <br />
-                      Android: Chrome → menu → Install app.
-                    </p>
-                    <p className="fine">
-                      Saved shopping and planning work offline after your first
-                      sign-in. Sign out to clear this device’s copy.
-                    </p>
-                  </section>
-                </>
-              )}
+                      <div className="setting-row">
+                        <div>
+                          <strong>Voice input</strong>
+                          <small>
+                            {ai.transcription
+                              ? "Voice transcription ready"
+                              : "Available when the assistant service is connected"}
+                          </small>
+                        </div>
+                      </div>
+                      <p className="fine voice-retention">Recordings are deleted after transcription.</p>
+                      <ScheduleStatus
+                        configured={ai.schedules}
+                        connected={ai.connected}
+                        stores={stores}
+                        offerJobs={state.offerJobs}
+                        onManageStores={manageStores}
+                      />
+                    </section>
+                  )}
+                  {settings === "data" && (
+                    <>
+                      <section className="settings-section">
+                        <h2>Data</h2>
+                        <div className="setting-row">
+                          <div>
+                            <strong>Export data</strong>
+                            <small>
+                              Meals, recipes, lists, pantry and preferences.
+                            </small>
+                          </div>
+                          <a className="button" href="/api/export" download>
+                            Export JSON
+                          </a>
+                        </div>
+                        <div className="setting-row">
+                          <div>
+                            <strong>Recent activity</strong>
+                            <small>
+                              Kept for 30 days. Clearing it keeps your preferences.
+                            </small>
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  "Clear recent activity and undo history for the household?",
+                                )
+                              )
+                                quietly([{ type: "clear-history" }]);
+                            }}
+                          >
+                            Clear history
+                          </button>
+                        </div>
+                        {user.role === "owner" && (
+                          <button
+                            className="danger text-button"
+                            onClick={() => open("delete-household")}
+                          >
+                            Delete household data
+                          </button>
+                        )}
+                      </section>
+                      <section className="settings-section">
+                        <h2>Install app</h2>
+                        <p className="muted">
+                          iPhone: Safari → Share → Add to Home Screen.
+                          <br />
+                          Android: Chrome → menu → Install app.
+                        </p>
+                        <p className="fine">
+                          Saved shopping and planning work offline after your first
+                          sign-in. Sign out to clear this device’s copy.
+                        </p>
+                      </section>
+                    </>
+                  )}
+                </div>
+              </div>
             </>
           )}
         </main>
@@ -1685,36 +1707,16 @@ function App() {
                 </button>
               </div>
             )}
-            {tab === "plan" && (
-              <div
-                className="capture-prompts"
-                role="group"
-                aria-label="Suggested prompts"
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    insertPrompt(
-                      `Suggest groceries for the meals planned from ${start} through ${days[6]}. Add them as shopping list suggestions for review.`,
-                    )
-                  }
-                >
-                  <ShoppingBasket size={17} aria-hidden="true" />
-                  Suggest groceries
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    insertPrompt(
-                      "Suggest three meals for the gaps this week, using our recipes and preferences.",
-                    )
-                  }
-                >
-                  <Utensils size={17} aria-hidden="true" />
-                  Suggest meals
-                </button>
-              </div>
-            )}
+            <div className="assistant-bar">
+              <h2>Kitchen assistant</h2>
+              {!ai.connected && <button
+                className="text-button connect-link"
+                onClick={() => {
+                  setTab("settings");
+                  setSettings("assistant");
+                }}
+              >Connect ChatGPT</button>}
+            </div>
             <div className={"capture " + (recording ? "recording" : "")}>
               <button
                 className="mic"
@@ -1764,44 +1766,40 @@ function App() {
                 )}
               </button>
             </div>
-            {(recording || transcribing || !ai.connected) && (
-              <p className="capture-hint">
-                {recording ? (
-                  "Recording · 60 seconds max"
-                ) : transcribing ? (
-                  "Transcribing…"
-                ) : (
-                  <button
-                    className="text-button"
-                    onClick={() => {
-                      setTab("settings");
-                      setSettings("assistant");
-                    }}
-                  >
-                    Connect ChatGPT
-                  </button>
-                )}
+            {tab === "plan" && (
+              <div
+                className="capture-prompts"
+                role="group"
+                aria-label="Suggested prompts"
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    insertPrompt(
+                      `Suggest groceries for the meals planned from ${start} through ${days[6]}. Add them as shopping list suggestions for review.`,
+                    )
+                  }
+                >
+                  Suggest groceries
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    insertPrompt(
+                      "Suggest three meals for the gaps this week, using our recipes and preferences.",
+                    )
+                  }
+                >
+                  Suggest meals
+                </button>
+              </div>
+            )}
+            {(recording || transcribing) && (
+              <p className="capture-hint" role="status">
+                {recording ? "Recording · 60 seconds max" : "Transcribing…"}
               </p>
             )}
           </div>
-          <nav className="bottom-nav">
-            {[
-              ["plan", "Week"],
-              ["shop", "Shop"],
-              ["recipes", "Recipes"],
-              ["pantry", "Pantry"],
-              ["settings", "Settings"],
-            ].map(([id, label]) => (
-              <button
-                key={id}
-                className={tab === id ? "selected" : ""}
-                aria-current={tab === id ? "page" : undefined}
-                onClick={() => setTab(id)}
-              >
-                <span>{label}</span>
-              </button>
-            ))}
-          </nav>
         </footer>
       </div>
       {modal && (
@@ -1835,6 +1833,7 @@ function App() {
         >
           {modal.kind === "signin" ? (
             <Login
+              embedded
               done={() => {
                 setModal(null);
                 k.refresh();
@@ -1988,13 +1987,18 @@ function RecipeDetail({
   const [servings, setServings] = useState(r.servings);
   return (
     <div className="form-body recipe-detail">
-      {(r.totalMinutes > 0 || r.collection === "saved" || r.collection === "suggested") && <div className="recipe-detail-meta">
-        {r.totalMinutes > 0 && <span>{r.totalMinutes} min</span>}
-        {r.collection === "saved" && <span>Saved from AI</span>}
-        {r.collection === "suggested" && <span>AI suggestion</span>}
-      </div>}
+      {(r.totalMinutes > 0 || r.collection === "saved" || r.collection === "suggested") && (
+        <div className="recipe-detail-meta">
+          {r.totalMinutes > 0 && <span>{r.totalMinutes} min</span>}
+          {r.collection === "saved" && <span>Saved from AI</span>}
+          {r.collection === "suggested" && <span>AI suggestion</span>}
+        </div>
+      )}
       {r.prerequisites && (
-        <p className="banner">Before you start: {r.prerequisites}</p>
+        <p className="recipe-prerequisites">
+          <strong>Before you start</strong>
+          {r.prerequisites}
+        </p>
       )}
       <div className="section-heading">
         <h3>Ingredients</h3>
@@ -2011,28 +2015,30 @@ function RecipeDetail({
         </label>
       </div>
       {r.ingredients.length ? (
-        r.ingredients.map((i: any, n: number) => (
-          <div className="ingredient-detail" key={n}>
-            <span>
-              {i.name}
-              {i.variant ? " · " + i.variant : ""}
-            </span>
-            <strong>
-              {i.quantity === null
-                ? ""
-                : Number(
-                    ((i.quantity * servings) / r.servings).toFixed(2),
-                  )}{" "}
-              {i.unit}
-            </strong>
-          </div>
-        ))
+        <ul className="recipe-ingredients">
+          {r.ingredients.map((i: any, n: number) => (
+            <li className="ingredient-detail" key={n}>
+              <span>
+                {i.name}
+                {i.variant ? " · " + i.variant : ""}
+              </span>
+              <strong>
+                {i.quantity === null
+                  ? ""
+                  : Number(
+                      ((i.quantity * servings) / r.servings).toFixed(2),
+                    )}{" "}
+                {i.unit}
+              </strong>
+            </li>
+          ))}
+        </ul>
       ) : (
         <p className="muted">No ingredient detail saved.</p>
       )}
       {r.steps.length > 0 && (
         <>
-          <h3>Make it</h3>
+          <h3>Method</h3>
           <ol className="recipe-steps">
             {r.steps.map((s: string, i: number) => (
               <li key={i}>{s}</li>
@@ -2273,13 +2279,13 @@ function Editor({
           input(
             "name",
             kind === "meals"
-              ? "What’s on the table?"
+              ? "Meal name"
               : kind === "stores"
                 ? "Branch / store name"
                 : "Name",
             "text",
             "",
-            { required: true, maxLength: 180, autoFocus: true },
+            { required: true, maxLength: 180, autoFocus: true, "data-initial-focus": true },
           )}
         {kind === "meals" && (
           <>
@@ -2287,7 +2293,7 @@ function Editor({
               {input("date", "Day", "date", date ?? today(), {
                 required: true,
               })}
-              <Field label="Meal">
+              <Field label="Meal type">
                 <select
                   name="mealType"
                   defaultValue={item?.mealType ?? "dinner"}
@@ -2302,9 +2308,10 @@ function Editor({
                 </select>
               </Field>
             </div>
-            <Field label="Who’s eating?">
+            <fieldset className="people-field">
+              <legend>Who’s eating?</legend>
               {people(participants, setParticipants)}
-            </Field>
+            </fieldset>
             <Field label="What’s the plan?">
               <select name="kind" defaultValue={item?.kind ?? "cooking"}>
                 <option value="cooking">Cooking at home</option>
@@ -2498,7 +2505,7 @@ function Editor({
             </div>
             <Field
               label="Dietary tags"
-              hint="For example: vegetarian, vegan. Only add tags you can verify."
+              hint="Add only verified tags. Separate them with commas."
             >
               <input name="tags" defaultValue={item?.tags?.join(", ") ?? ""} />
             </Field>
@@ -2665,25 +2672,25 @@ function Editor({
         )}
         {kind === "profile" && (
           <>
-            {input("name", "Display name", "text", data.user.name, {
-              required: true,
-              maxLength: 80,
-            })}
-            <Field label="Diet">
-              <select
-                value={diet}
-                onChange={(e) => setDiet(e.target.value as any)}
-              >
-                {["unspecified", "vegetarian", "nonvegetarian", "vegan"].map(
-                  (v) => (
-                    <option key={v} value={v}>
-                      {titleCase(v)}
-                    </option>
-                  ),
-                )}
-              </select>
-            </Field>
             <div className="form-grid">
+              {input("name", "Display name", "text", data.user.name, {
+                required: true,
+                maxLength: 80,
+              })}
+              <Field label="Diet">
+                <select
+                  value={diet}
+                  onChange={(e) => setDiet(e.target.value as any)}
+                >
+                  {["unspecified", "vegetarian", "nonvegetarian", "vegan"].map(
+                    (v) => (
+                      <option key={v} value={v}>
+                        {titleCase(v)}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </Field>
               <Field label="Eggs">
                 <select name="eggs" defaultValue={profile.eggs}>
                   <option value="ask">Ask me</option>
@@ -2701,7 +2708,7 @@ function Editor({
             </div>
             <Field
               label="Allergies"
-              hint="Separate with commas. These are hard constraints."
+              hint="Separate allergies with commas. They always apply to meal suggestions."
             >
               <input
                 name="allergies"
@@ -2812,7 +2819,6 @@ function Editor({
                 }
               }}
             >
-              <Trash2 size={16} />
               Remove
             </button>
           )}

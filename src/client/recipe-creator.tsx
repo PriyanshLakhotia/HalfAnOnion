@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import { X } from "lucide-react";
 import { api } from "./store";
 import { useVoiceInput } from "./use-voice-input";
+import { navigateRecipeTabs } from "./recipe-tabs";
 import {
   MAX_RECIPE_PHOTOS,
   MAX_PHOTO_BYTES,
@@ -126,6 +127,7 @@ export function RecipeCreator({
         className="recipe-tabs"
         role="tablist"
         aria-label="Add recipe method"
+        onKeyDown={navigateRecipeTabs}
       >
         <button
           type="button"
@@ -133,6 +135,7 @@ export function RecipeCreator({
           id="capture-tab"
           aria-controls="capture-panel"
           aria-selected={tab === "capture"}
+          tabIndex={tab === "capture" ? 0 : -1}
           disabled={locked}
           onClick={() => setTab("capture")}
         >
@@ -144,6 +147,7 @@ export function RecipeCreator({
           id="manual-tab"
           aria-controls="manual-panel"
           aria-selected={tab === "manual"}
+          tabIndex={tab === "manual" ? 0 : -1}
           disabled={locked}
           onClick={() => setTab("manual")}
         >
@@ -158,12 +162,13 @@ export function RecipeCreator({
       >
         <form onSubmit={create}>
           <div className="form-body recipe-capture">
-            <label className="sr-only" htmlFor="recipe-input">
+            <label className="capture-label" htmlFor="recipe-input">
               Recipe text
             </label>
             <textarea
               id="recipe-input"
               autoFocus
+              data-initial-focus
               rows={7}
               value={text}
               maxLength={12000}
