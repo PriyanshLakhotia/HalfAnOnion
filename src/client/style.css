@@ -48,9 +48,9 @@ h1, h2, h3 {
   text-wrap: balance;
   overflow-wrap: anywhere;
 }
-h1 { font-size: clamp(46px, 5.2vw, 72px); line-height: 1; letter-spacing: -.035em; }
-h2 { font-size: clamp(29px, 3vw, 38px); line-height: 1.12; letter-spacing: -.022em; }
-h3 { font-size: 26px; line-height: 1.16; }
+h1 { font-size: clamp(2.1rem, 3.3vw, 2.85rem); line-height: 1.1; letter-spacing: -.035em; }
+h2 { font-size: clamp(1.45rem, 2vw, 1.8rem); line-height: 1.18; letter-spacing: -.022em; }
+h3 { font-size: 1.375rem; line-height: 1.25; }
 a, summary { color: var(--accent); }
 a { text-underline-offset: .2em; }
 img { max-width: 100%; }
@@ -108,7 +108,7 @@ input[type="checkbox"] { width: 18px; min-height: 0; height: 18px; accent-color:
 .actions { flex-wrap: wrap; }
 .section-heading, .page-heading { justify-content: space-between; }
 .section-heading { margin-bottom: 16px; }
-.page-heading { margin: 12px 0 32px; }
+.page-heading { margin: 14px 0 30px; }
 .page-heading > button { flex-shrink: 0; }
 .empty { padding: 24px; color: var(--muted); background: #f2ece2; border-radius: 12px; }
 .sr-only, .skip-link:not(:focus) {
@@ -135,11 +135,11 @@ input[type="checkbox"] { width: 18px; min-height: 0; height: 18px; accent-color:
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  min-height: 94px;
+  min-height: 80px;
 }
 .wordmark { display: flex; align-items: center; gap: 7px; color: var(--accent); }
 .wordmark svg { flex-shrink: 0; }
-.wordmark span { font: 400 35px/1 var(--display); letter-spacing: -.035em; white-space: nowrap; }
+.wordmark span { font: 400 1.875rem/1 var(--display); letter-spacing: -.035em; white-space: nowrap; }
 .main-nav { display: flex; align-items: center; gap: 4px; }
 .main-nav button {
   border: 0;
@@ -211,12 +211,12 @@ input[type="checkbox"] { width: 18px; min-height: 0; height: 18px; accent-color:
   align-items: flex-start;
   justify-content: center;
   flex-direction: column;
-  padding: clamp(24px, 2.2vw, 32px) clamp(26px, 3.6vw, 58px);
+  padding: clamp(22px, 2.1vw, 30px) clamp(24px, 3vw, 44px);
   color: var(--accent);
 }
-.planner-title h1 { font-size: clamp(54px, 5.9vw, 84px); }
+.planner-title h1 { font-size: clamp(2.3rem, 3.5vw, 3rem); }
 .planner-title p { margin-top: 8px; font-size: 14px; color: #644854; }
-.planner-title button { margin-top: 20px; padding-inline: 20px; }
+.planner-title button { margin-top: 16px; padding-inline: 16px; }
 .planner-cover img {
   position: absolute;
   inset: 0 0 0 auto;
@@ -225,28 +225,28 @@ input[type="checkbox"] { width: 18px; min-height: 0; height: 18px; accent-color:
   object-fit: cover;
   object-position: 50% 53%;
 }
-.week-toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 28px 0 15px; }
-.week-toolbar h2 { margin-right: 8px; font-size: clamp(29px, 2.8vw, 40px); font-variant-numeric: lining-nums; }
+.week-toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 32px 0 16px; }
+.week-toolbar h2 { margin-right: 8px; font-size: clamp(1.4rem, 2.2vw, 1.8rem); font-variant-numeric: lining-nums; }
 .week-toolbar select { margin-left: auto; min-height: 40px; padding-block: 6px; font-size: 14px; }
 .date-switch { display: flex; align-items: center; gap: 1px; }
 .date-switch .icon { min-height: 36px; width: 36px; }
 .date-switch .text-button { font-size: 13px; margin-left: 3px; }
-.week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
 .day {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 157px;
+  min-height: 136px;
   padding: 14px 12px 8px;
   border-radius: 9px;
-  background: #f0ebe1;
+  background: #f2ede4;
 }
-.day.today { color: #fff6e9; background: var(--accent); }
+.day.today { color: var(--accent); background: #ead6db; }
 .day > header { display: flex; flex-direction: column; gap: 3px; padding: 2px 3px 12px; }
 .day-name { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 3px; font-size: 13px; color: var(--muted); }
-.day.today .day-name { color: #f9e5e1; }
-.day-name small { font: italic 17px/1 var(--display); }
-.day header b { font: 400 43px/1 var(--display); letter-spacing: -.03em; }
+.day.today .day-name { color: var(--accent); }
+.day-name small { font: 550 .75rem/1.4 var(--sans); }
+.day header b { font: 400 1.9rem/1.1 var(--display); letter-spacing: -.03em; }
 .day-meals { display: flex; flex: 1; flex-direction: column; gap: 5px; }
 .open-day {
   width: 100%;
@@ -259,8 +259,8 @@ input[type="checkbox"] { width: 18px; min-height: 0; height: 18px; accent-color:
   color: var(--muted);
   font-size: 13px;
 }
-.day.today .open-day { color: #f9e5e1; }
-.day.today .open-day:hover { background: #684157; }
+.day.today .open-day { color: var(--accent); }
+.day.today .open-day:hover { background: #e3c9d1; }
 .meal {
   display: grid;
   justify-content: stretch;
@@ -275,7 +275,7 @@ input[type="checkbox"] { width: 18px; min-height: 0; height: 18px; accent-color:
   background: var(--surface);
   overflow-wrap: anywhere;
 }
-.meal strong { font-weight: 650; font-size: 14px; }
+.meal strong { font-weight: 600; font-size: .9375rem; line-height: 1.4; }
 .meal small, .components, .meal-people, .cooked { font-size: 12px; line-height: 1.4; color: var(--muted); font-weight: 400; }
 .meal .cooked { color: #455237; }
 .meal.outing { background: #eedbdd; }
@@ -295,13 +295,13 @@ input[type="checkbox"] { width: 18px; min-height: 0; height: 18px; accent-color:
   display: grid;
   grid-template-columns: minmax(150px, 1fr) minmax(0, 3fr);
   align-items: start;
-  gap: 6px 24px;
-  padding: 19px 24px 13px;
+  gap: 4px 20px;
+  padding: 15px 20px 9px;
   border-radius: 12px;
   background: #eae4da;
 }
 .assistant-bar { grid-column: 1; grid-row: span 2; min-width: 0; }
-.assistant-bar h2 { font-size: 28px; }
+.assistant-bar h2 { font: 600 1rem/1.45 var(--sans); letter-spacing: 0; }
 .connect-link {
   padding: 5px 0;
   min-height: 34px;
@@ -358,10 +358,10 @@ input[type="checkbox"] { width: 18px; min-height: 0; height: 18px; accent-color:
 @media (max-width: 1023px) {
   .week-grid { grid-template-columns: 1fr; gap: 5px; }
   .day { flex-direction: row; align-items: stretch; min-height: 66px; padding: 8px 12px; gap: 16px; }
-  .day > header { flex: 0 0 66px; justify-content: center; padding: 0; }
-  .day-name { gap: 5px; justify-content: flex-start; font-size: 12px; }
-  .day-name small { font-size: 15px; }
-  .day header b { font-size: 30px; }
+  .day > header { flex: 0 0 55px; justify-content: flex-start; padding: 0; }
+  .day-name { gap: 4px; justify-content: flex-start; font-size: .8125rem; }
+  .day-name small { font-size: .75rem; }
+  .day header b { font-size: 1.55rem; }
   .day-meals { flex: 1; min-width: 0; }
   .day-meals .open-day { width: auto; align-self: flex-end; margin-block: auto; padding-inline: 8px; }
   .day-meals:has(.meal) .open-day { min-height: 32px; }
@@ -375,8 +375,8 @@ input[type="checkbox"] { width: 18px; min-height: 0; height: 18px; accent-color:
 @media (max-width: 940px) {
   .masthead-inner { min-height: 80px; gap: 12px; }
   .main-nav button { padding-inline: 13px; }
-  .wordmark span { font-size: 31px; }
-  .week-grid { gap: 4px; }
+  .wordmark span { font-size: 1.8rem; }
+  .week-grid { gap: 7px; }
   .day { padding-inline: 8px; }
   .day > header { padding-inline: 0; }
 }
@@ -386,12 +386,13 @@ input[type="checkbox"] { width: 18px; min-height: 0; height: 18px; accent-color:
   .main-nav button { flex: 1; padding: 8px 4px; }
   .kitchen-account { justify-self: end; max-width: 155px; }
   .planner-title { padding: 24px; }
-  .planner-title h1 { font-size: clamp(42px, 8.5vw, 62px); }
+  .planner-title h1 { font-size: clamp(2.1rem, 5vw, 2.5rem); }
   .week-toolbar { column-gap: 8px; margin-top: 24px; }
-  .capture-wrap { grid-template-columns: minmax(0, 1fr); padding: 12px 14px 6px; gap: 6px; }
+  .capture-wrap { grid-template-columns: minmax(0, 1fr); padding: 10px 12px 4px; gap: 3px; }
   .assistant-bar, .capture, .capture-prompts, .capture-hint { grid-column: 1; }
   .assistant-bar { grid-row: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .assistant-bar h2 { font-size: 24px; }
+  .assistant-bar h2 { font-size: .9375rem; }
+  .assistant-bar:not(:has(button)) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .connect-link { min-height: 30px; }
   .capture-prompts { gap: 16px; }
   .workspace-footer { padding: 8px 0 max(8px, env(safe-area-inset-bottom)); }
@@ -399,7 +400,7 @@ input[type="checkbox"] { width: 18px; min-height: 0; height: 18px; accent-color:
 @media (max-width: 520px) {
   .wordmark { gap: 4px; }
   .wordmark svg { width: 27px; height: 27px; }
-  .wordmark span { font-size: 29px; }
+  .wordmark span { font-size: 1.65rem; }
   .account-letter { display: none; }
   .kitchen-account[aria-current="page"] { background: var(--tint); padding-inline: 7px; }
   .account-copy { text-align: right; }
@@ -408,7 +409,7 @@ input[type="checkbox"] { width: 18px; min-height: 0; height: 18px; accent-color:
   .planner-cover { grid-template-columns: 60% 40%; border-radius: 11px; }
   .planner-cover img { width: 40%; }
   .planner-title { padding: 20px 15px; }
-  .planner-title h1 { font-size: clamp(36px, 9.2vw, 48px); }
+  .planner-title h1 { font-size: clamp(1.95rem, 7.3vw, 2.15rem); }
   .planner-title p { font-size: 12px; line-height: 1.4; margin-top: 7px; }
   .planner-title button { min-height: 38px; margin-top: 12px; padding: 8px 12px; font-size: 13px; }
   .week-toolbar { row-gap: 4px; margin-bottom: 10px; }
@@ -416,7 +417,7 @@ input[type="checkbox"] { width: 18px; min-height: 0; height: 18px; accent-color:
   .week-toolbar select { max-width: 50%; }
   .date-switch { margin-left: -8px; }
   .page-heading { margin: 10px 0 24px; }
-  .page-heading h1 { font-size: 44px; }
+  .page-heading h1 { font-size: 2.1rem; }
   .page-heading button { padding-inline: 11px; }
   .workspace-footer { margin-top: 10px; }
 }

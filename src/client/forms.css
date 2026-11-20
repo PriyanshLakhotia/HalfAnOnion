@@ -31,7 +31,7 @@
 }
 
 .sheet > header h2 {
-  font: 400 2.7rem/1 var(--display);
+  font: 400 1.95rem/1.12 var(--display);
   letter-spacing: -.025em;
   overflow-wrap: anywhere;
 }
@@ -346,7 +346,7 @@
 }
 
 .form-body h3 {
-  font: 400 1.85rem/1.1 var(--display);
+  font: 400 1.4rem/1.2 var(--display);
   letter-spacing: -.015em;
 }
 
@@ -464,7 +464,7 @@
   }
 
   .sheet > header h2 {
-    font-size: 2.2rem;
+    font-size: 1.7rem;
   }
 
   .sheet :is(input:not([type="checkbox"]), select, textarea) {

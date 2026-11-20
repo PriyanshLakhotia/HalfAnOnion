@@ -47,7 +47,9 @@ test('real API accepts an ordinary reply with zero actions', async () => {
   const before = await state();
   const response = await command(packet());
   assert.equal(response.status, 200, await response.clone().text());
-  assert.equal((await response.json() as any).completed, false);
+  const reply = await response.json() as any;
+  assert.equal(reply.completed, false);
+  assert.deepEqual(JSON.parse(reply.context), { text: 'Please update my kitchen.', result: 'Ready.' });
   assert.deepEqual(await state(), before);
 });
 test('the reported recipe response saves successfully through the real API', async () => {
@@ -72,6 +74,17 @@ test('recipe, meal and shopping actions save atomically and replay without dupli
   assert.equal(replay.status, 200, await replay.clone().text());
   assert.deepEqual(await state(), before);
   assert.ok(lastContext.recentActivity.some((a: any) => a.id === id));
+});
+test('repeat recommendations point the reply to the current proposal without duplicating it', async () => {
+  const mealIdea = (id: string) => ({ type: 'put', kind: 'suggestions', id, data: {
+    name: 'Dinner in town', kind: 'meal', participants: [ownerId], expiresOn: '2099-01-01',
+  } });
+  const first = await command(packet([mealIdea('original-idea')]));
+  assert.equal(first.status, 200);
+  const second = await command(packet([mealIdea('repeat-idea')]));
+  assert.equal(second.status, 200);
+  assert.deepEqual((await second.json() as any).relatedSuggestionIds, ['original-idea']);
+  assert.equal((await state()).entities.suggestions['repeat-idea'], undefined);
 });
 test('a malformed batch returns a useful error and writes none of its valid records', async () => {
   const before = await state();

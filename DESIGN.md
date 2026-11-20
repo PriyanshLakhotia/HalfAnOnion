@@ -21,7 +21,7 @@ The red-onion still life appears on the sign-in cover and the planner. Its cut f
 
 ## Layout and controls
 
-The main navigation follows the same order at every width. A wide planner shows seven aligned dates. Below 1024px, each date gets an agenda row with room for meal names. Aubergine identifies today and primary actions. Pale rose identifies the active section or filter.
+The main navigation follows the same order at every width. A wide planner shows seven aligned dates. Below 1024px, each date gets an agenda row with room for meal names. Aubergine identifies primary actions. Pale rose identifies today and the active section or filter.
 
 Group related controls with spacing and a change of surface. Use an outline where it identifies an editable field or a button. Give icon-only actions an accessible name. Keep the native dialog and its visible title for editing, and show quantities, participants, and purchase state beside the records they describe.
 

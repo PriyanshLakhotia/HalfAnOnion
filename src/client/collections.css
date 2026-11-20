@@ -332,7 +332,7 @@
   overflow-wrap: anywhere;
 }
 .recipe-name {
-  font: 400 1.75rem / 1.12 var(--display);
+  font: 400 1.4rem / 1.25 var(--display);
   letter-spacing: -0.02em;
 }
 .recipe-ingredient-preview,
@@ -562,7 +562,7 @@
     padding: 0 0.875rem 0.875rem;
   }
   .recipe-name {
-    font-size: 1.55rem;
+    font-size: 1.3rem;
   }
   .library-tools .recipe-search {
     width: 100%;

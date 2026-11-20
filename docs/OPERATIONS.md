@@ -15,7 +15,7 @@ The owner bootstrap email is stored as a server secret. It is not used for accou
 - iPhone: open in Safari → Share → Add to Home Screen.
 - Android: open in Chrome → menu → Install app/Add to Home Screen.
 - Sign in online once before shopping offline. A small status indicator reports queued changes. Keep the app open briefly after reconnecting until it says up to date. A conflicting change stays visible with a discard control.
-- Microphone permission is requested only on deliberate tap after the companion is configured. Tap again to stop, review/correct the transcript and submit. Recording ends after 60 seconds. Browser speech recognition is not used as the sole transcription path.
+- Microphone permission is requested only on deliberate tap after the companion is configured. Tap again to stop. The app transcribes the recording and sends it with the current draft. Recording also stops and sends at 60 seconds. If sending fails, the transcript remains editable. Browser speech recognition is not used as the sole transcription path.
 - Close all app windows and reopen to activate a downloaded update. Signing out clears the local household copy and warns if unsynced changes would be discarded.
 
 Phone installation, on-screen keyboard, actual offline replay and microphone behavior require physical Android/iPhone checks. Desktop Chromium was unavailable in this environment; screenshots have not been visually reviewed.
@@ -24,7 +24,7 @@ Phone installation, on-screen keyboard, actual offline replay and microphone beh
 
 See [Cloud Run companion setup](../companion/README.md). Once deployment access is ready, the existing Settings → Assistant screen starts official device-code sign-in and streams completion. The owner must complete that authorization. The dedicated login survives Cloud Run cold starts in private, generation-fenced storage. No authoring or Lens credentials are copied.
 
-Voice uses self-hosted Whisper on the same request-based service, without an API key. Review the transcript before submitting; Hindi/Hinglish and mobile formats still need acceptance testing. Scheduler posts daily recipes and weekly retailer jobs to the companion. New recommendations remain proposals and do not overwrite plans. The UI only reports schedules configured after actual Scheduler creation.
+Voice uses self-hosted Whisper on the same request-based service, without an API key. Hindi/Hinglish and mobile formats still need physical-device acceptance testing. Scheduler posts daily recipes and weekly retailer jobs to the companion. New recommendations remain proposals and do not overwrite plans. The UI only reports schedules configured after actual Scheduler creation.
 
 ## Memory
 
@@ -54,7 +54,7 @@ The UI reports source failures separately from empty offers. The server logs onl
 
 ## Recipe capture and schedules
 
-**Recipes → Save a recipe** opens **Photos or text** first. Add up to six photos, enter a name/description/recipe in the single text box, or use **Record** to dictate into that box. Photos alone and text alone both work. **Create recipe** organizes the input and saves one recipe, then opens its details. A necessary clarification stays in the capture tab. **Manual** is the second tab; existing recipe edits continue to use the manual editor. Uploads are resized on the device, sent only for processing, and not stored in the kitchen database. Voice uses the existing household transcription service.
+**Recipes → Save a recipe** opens **Photos or text** first. Add up to six photos, enter a name/description/recipe in the single text box, or use **Record** to dictate. Stopping a recording transcribes it and submits the current text and photos to create the recipe. Photos alone and text alone both work. **Create recipe** organizes the input and saves one recipe, then opens its details. A necessary clarification stays in the capture tab. **Manual** is the second tab; existing recipe edits continue to use the manual editor. Uploads are resized on the device, sent only for processing, and not stored in the kitchen database. Voice uses the existing household transcription service.
 
 **Settings → Assistant → Scheduled updates** shows each job's next scheduled time in Europe/Amsterdam, with offer-source results when available. Jobs without a selected store are labelled accordingly. The UI and Scheduler deployment script share `companion/schedules.json`; the times describe the configured schedule, not a guarantee of successful execution. Daily recipe runs do not repeat matching, unexpired proposals or recent accept/dismiss decisions. Existing duplicates display once; acting on that card resolves its matching pending duplicates together.
 

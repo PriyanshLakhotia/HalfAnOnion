@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { recipeCaptureSchema, MAX_RECIPE_REQUEST_BYTES } from "../domain/recipe-capture";
-import { DomainError, today, assistantState } from "../domain/model";
+import { DomainError, today, assistantState, pendingSuggestions, sameSuggestion } from "../domain/model";
 import { parseAssistantResult, validateAssistantResult, assistantValidationIssues, INVALID_ASSISTANT_OUTPUT } from '../domain/assistant';
 import {
   body,
@@ -169,8 +169,9 @@ export async function aiRoute(
       console.warn('assistant_output_rejected', { issues: assistantValidationIssues(error) });
       throw new DomainError(INVALID_ASSISTANT_OUTPUT, 502);
     }
+    const replyContext = JSON.stringify({ text: input.text, result: parsed.message }).slice(0, 8000);
     if (parsed.followUp || !parsed.actions?.length)
-      return json({ message: parsed.message, completed: false });
+      return json({ message: parsed.message, completed: false, context: replyContext });
     if (
       parsed.actions.some(
         (a) =>
@@ -198,14 +199,17 @@ export async function aiRoute(
       console.warn('assistant_update_rejected', { issues: assistantValidationIssues(error) });
       throw new DomainError(INVALID_ASSISTANT_OUTPUT, 502);
     }
+    // A repeat recommendation keeps the household's existing proposal and recipe IDs.
+    const requestedIdeas = parsed.actions.filter(a => a.type === "put" && a.kind === "suggestions");
+    const existingIdeas = requestedIdeas.length ? pendingSuggestions(snap.state.entities.suggestions)
+      .filter(idea => requestedIdeas.some(action => action.data && sameSuggestion(idea, action.data)))
+      .map(idea => idea.id) : [];
     return json({
       message: parsed.message,
       completed: true,
       operationId: saved.id,
-      context: JSON.stringify({
-        text: input.text,
-        result: parsed.message,
-      }).slice(0, 8000),
+      relatedSuggestionIds: existingIdeas,
+      context: replyContext,
     });
   }
   if (path === "/api/transcribe") {

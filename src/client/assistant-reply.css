@@ -1,0 +1,192 @@
+.assistant-reply {
+  margin-block: 1.75rem 0.25rem;
+  padding: clamp(1rem, 2vw, 1.75rem);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.assistant-reply:focus {
+  outline: none;
+}
+.reply-header,
+.reply-section-heading,
+.reply-ingredients li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.reply-header {
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+.reply-header h2 {
+  font-size: 1.65rem;
+}
+.reply-header .text-button,
+.reply-section-heading .text-button,
+.reply-undo {
+  min-height: 36px;
+  padding: 0.375rem 0.25rem;
+  font-size: 0.8125rem;
+}
+.reply-prompt,
+.reply-meta,
+.reply-list small,
+.reply-ingredients small {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.reply-prompt {
+  margin-bottom: 1.1rem;
+  max-width: 74ch;
+  white-space: pre-line;
+}
+.reply-prose,
+.reply-list,
+.reply-recipes p {
+  font: 400 0.9375rem/1.62 var(--sans);
+}
+.reply-prose {
+  max-width: 72ch;
+}
+.reply-prose > * + * {
+  margin-top: 0.65rem;
+}
+.reply-prose :is(h3, strong),
+.reply-list strong {
+  font-weight: 600;
+}
+.reply-prose h3,
+.reply-group > h3,
+.reply-section-heading h3 {
+  font: 600 1rem/1.42 var(--sans);
+  letter-spacing: 0;
+}
+.reply-prose h3:not(:first-child) {
+  margin-top: 1.15rem;
+}
+.reply-prose p {
+  white-space: pre-line;
+}
+.reply-prose :is(ol, ul) {
+  margin-block: 0.5rem;
+  padding-left: 1.5rem;
+}
+.reply-prose li + li {
+  margin-top: 0.3rem;
+}
+.reply-prose blockquote {
+  margin-inline: 0;
+  padding: 0.5rem 1rem;
+  background: var(--paper);
+}
+.reply-prose pre,
+.reply-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.reply-table table {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.reply-table :is(th, td) {
+  padding: 0.45rem 1rem 0.45rem 0;
+  text-align: left;
+  vertical-align: top;
+}
+.reply-table th {
+  font-weight: 600;
+}
+.reply-group,
+.reply-note {
+  margin-top: 1.35rem;
+}
+.reply-group > h3,
+.reply-section-heading {
+  margin-bottom: 0.625rem;
+}
+.reply-recipes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 0.75rem;
+}
+.reply-recipes article {
+  background: var(--paper);
+  padding: 1rem 1.1rem;
+  border-radius: 10px;
+  min-width: 0;
+}
+.reply-recipes article:only-child {
+  max-width: 44rem;
+}
+.reply-recipes h4 {
+  margin: 0;
+}
+.reply-recipe-name {
+  min-height: 34px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 0.18em;
+  font: 400 1.45rem/1.15 var(--display);
+  text-align: left;
+  justify-content: flex-start;
+}
+.reply-recipe-name:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.reply-recipes .reply-meta {
+  margin: 0.125rem 0 0.5rem;
+  font: 400 0.8125rem/1.5 var(--sans);
+}
+.reply-recipes details {
+  margin-top: 0.5rem;
+}
+.assistant-reply summary {
+  cursor: pointer;
+  padding-block: 0.4rem;
+  font-size: 0.875rem;
+}
+.reply-note > .reply-prose {
+  margin-top: 0.5rem;
+}
+.reply-ingredients,
+.reply-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.reply-ingredients {
+  font-size: 0.875rem;
+}
+.reply-ingredients li {
+  padding: 0.375rem 0;
+}
+.reply-ingredients li > span:last-child {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.reply-groceries {
+  max-width: 42rem;
+}
+.reply-groceries li {
+  padding-block: 0.45rem;
+}
+.reply-list small,
+.reply-ingredients small {
+  display: block;
+}
+.reply-list {
+  max-width: 70ch;
+}
+.reply-list li + li {
+  margin-top: 0.75rem;
+}
+.reply-undo {
+  margin-top: 0.75rem;
+}

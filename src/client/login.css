@@ -21,7 +21,7 @@
 
 .auth-wordmark {
   margin: 0;
-  font: 400 clamp(54px, 7vw, 96px)/.98 var(--display);
+  font: 400 clamp(2.8rem, 5.5vw, 4.5rem)/.98 var(--display);
   letter-spacing: -.035em;
 }
 
@@ -47,7 +47,7 @@
 
 .auth-form h1 {
   margin: 0 0 32px;
-  font: 400 clamp(48px, 5vw, 74px)/1 var(--display);
+  font: 400 clamp(2.1rem, 3.4vw, 3rem)/1 var(--display);
   letter-spacing: -.035em;
 }
 
@@ -118,7 +118,7 @@
 }
 
 .auth-loading .auth-wordmark {
-  font-size: clamp(48px, 7vw, 70px);
+  font-size: clamp(2.25rem, 5vw, 3.25rem);
 }
 
 .auth-loading [role="status"] {
@@ -143,7 +143,7 @@
   }
 
   .auth-wordmark {
-    font-size: clamp(46px, 10.8vw, 62px);
+    font-size: clamp(2rem, 8.8vw, 3rem);
   }
 
   .auth-photo {

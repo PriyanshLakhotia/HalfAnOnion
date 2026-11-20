@@ -64,13 +64,14 @@ export function RecipeCreator({
     setText(value.slice(0, 12000));
     requestId.current = null;
   };
-  const voice = useVoiceInput((transcript) => {
-    setText((current) =>
-      [current, transcript].filter(Boolean).join("\n").slice(0, 12000),
-    );
+  const submitting = useRef(false);
+  const voice = useVoiceInput(transcript => {
+    const dictated = [text, transcript].filter(Boolean).join("\n");
+    setText(dictated);
     requestId.current = null;
+    void create(dictated);
   }, setError);
-  const locked = busy || uploading || voice.recording || voice.transcribing;
+  const locked = busy || uploading || voice.phase !== "idle";
   async function upload(files: FileList | null) {
     if (!files?.length) return;
     setError("");
@@ -98,9 +99,13 @@ export function RecipeCreator({
       if (input.current) input.current.value = "";
     }
   }
-  async function create(event: React.FormEvent) {
-    event.preventDefault();
-    if (locked) return;
+  async function create(content: string) {
+    if (submitting.current || uploading) return;
+    if (content.length > 12000) {
+      setError("Shorten the recipe text to 12,000 characters and try again.");
+      return;
+    }
+    submitting.current = true;
     setBusy(true);
     setError("");
     setQuestion("");
@@ -108,7 +113,7 @@ export function RecipeCreator({
     try {
       const result = await api("/api/ai/recipe", {
         id: requestId.current,
-        text,
+        text: content,
         images: photos.map((photo) => photo.data),
       });
       if (!result.completed) {
@@ -118,6 +123,7 @@ export function RecipeCreator({
     } catch (error: any) {
       setError(error.message);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -160,7 +166,7 @@ export function RecipeCreator({
         aria-labelledby="capture-tab"
         hidden={tab !== "capture"}
       >
-        <form onSubmit={create}>
+        <form onSubmit={event => { event.preventDefault(); if (!locked) void create(text); }}>
           <div className="form-body recipe-capture">
             <label className="capture-label" htmlFor="recipe-input">
               Recipe text
@@ -196,7 +202,7 @@ export function RecipeCreator({
               <button
                 type="button"
                 disabled={
-                  busy || uploading || voice.transcribing || !voiceEnabled
+                  busy || uploading || voice.phase === "starting" || voice.transcribing || !voiceEnabled
                 }
                 title={
                   !voiceEnabled
@@ -209,7 +215,7 @@ export function RecipeCreator({
                 }}
               >
                 {voice.recording
-                  ? "Stop recording"
+                  ? "Stop and create"
                   : voice.transcribing
                     ? "Transcribing…"
                     : "Record"}
@@ -246,7 +252,7 @@ export function RecipeCreator({
             )}
             {voice.recording && (
               <p className="fine" role="status">
-                Recording · 60 seconds max
+                Stop to transcribe and create the recipe. Recording ends after 60 seconds.
               </p>
             )}
             {question && (

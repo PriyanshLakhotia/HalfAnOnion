@@ -27,15 +27,13 @@ import "./style.css";
 import "./forms.css";
 import "./collections.css";
 import "./login.css";
+import "./assistant-reply.css";
 import { ScheduleStatus } from "./schedule-status";
 import { RecipeLibrary } from "./recipe-library";
 import { RecipeCreator } from "./recipe-creator";
-type AssistantModel = {
-  model: string;
-  displayName: string;
-  defaultReasoningEffort: string;
-  supportedReasoningEfforts: { reasoningEffort: string }[];
-};
+import { useAssistantStatus } from "./use-assistant-status";
+import { useVoiceInput } from "./use-voice-input";
+import { ReplyContent, type AssistantReply } from "./assistant-reply";
 const units = [
   "",
   "g",
@@ -290,33 +288,40 @@ function App() {
       () => sessionStorage.getItem("onion-draft") ?? "",
     ),
     [processing, setProcessing] = useState(false),
+    [captureError, setCaptureError] = useState(""),
     [connecting, setConnecting] = useState(false),
     [signIn, setSignIn] = useState<Entity | null>(null),
     [copyMessage, setCopyMessage] = useState(""),
-    [ai, setAi] = useState<any>({ connected: false, transcription: false }),
-    [recording, setRecording] = useState(false),
-    [transcribing, setTranscribing] = useState(false),
+    [reply, setReply] = useState<AssistantReply | null>(null),
+    [replyExpanded, setReplyExpanded] = useState(false),
     [invite, setInvite] = useState(""),
     [invitations, setInvitations] = useState<any[]>([]),
     [settings, setSettings] = useState("household");
-  const recorder = useRef<MediaRecorder | null>(null);
+  const { status: ai, retry: retryStatus, confirmed: confirmStatus } = useAssistantStatus(data?.user.id);
+  const commandPending = useRef(false);
+  const retryCommand = useRef<{ id: string; text: string; context: string } | null>(null);
+  const replySection = useRef<HTMLElement>(null);
+  const activeTab = useRef(tab);
+  activeTab.current = tab;
+  const voice = useVoiceInput(transcript => {
+    const instruction = [text.trim(), transcript].filter(Boolean).join(" ");
+    setText(instruction);
+    void command(instruction);
+  }, setCaptureError);
+  const { recording, transcribing } = voice;
   const connectingRef = useRef(false);
   const codeInput = useRef<HTMLInputElement | null>(null);
   const draftInput = useRef<HTMLTextAreaElement>(null);
   const storesSection = useRef<HTMLElement>(null);
-  const recordTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (
       data &&
       !data.members.find((m) => m.id === data.user.id)?.profile.onboarded
     )
       setModal({ kind: "profile" });
-    if (data)
-      api("/api/ai/status")
-        .then(setAi)
-        .catch(() => {});
   }, [data?.user.id]);
   useEffect(() => {
+    setReplyExpanded(false);
     window.scrollTo(0, 0);
   }, [tab]);
   useEffect(() => {
@@ -335,10 +340,6 @@ function App() {
           };
         })
         .catch(() => {});
-    return () => {
-      recorder.current?.stream.getTracks().forEach((t) => t.stop());
-      if (recordTimer.current) clearTimeout(recordTimer.current);
-    };
   }, []);
   useEffect(() => {
     if (data?.user.role === "owner" && tab === "settings")
@@ -346,6 +347,12 @@ function App() {
         .then(setInvitations)
         .catch(() => {});
   }, [data?.user.id, tab, invite]);
+  useEffect(() => {
+    if (replyExpanded && replySection.current) {
+      replySection.current.focus({ preventScroll: true });
+      replySection.current.scrollIntoView({ block: "start" });
+    }
+  }, [reply, replyExpanded]);
   async function act(actions: Operation["actions"]) {
     try {
       await k.act(actions);
@@ -372,7 +379,10 @@ function App() {
     recipes = entries(e.recipes).filter(r => ["ours", "saved"].includes(r.collection)),
     memories = entries(e.memories).filter((m) => !m.forgotten),
     pantry = entries(e.pantry);
-  const models: AssistantModel[] = ai.models ?? [];
+  const models = ai.models ?? [];
+  const connectionKnown = typeof ai.connected === "boolean";
+  const checkingConnection = !connectionKnown && !ai.error && ai.available !== false;
+  const canConnect = user.role === "owner" && ai.connected === false;
   const selectedModel = models.find(m => m.model === state.model);
   const thinkingLevels = selectedModel?.supportedReasoningEfforts ?? [];
   const pending = items.filter((i) => i.status === "confirmed").length;
@@ -424,23 +434,38 @@ function App() {
       storesSection.current?.scrollIntoView({ block: "start" });
     });
   }
-  async function command() {
-    if (!text.trim() || processing) return;
+  async function command(instruction: string) {
+    if (!instruction.trim() || commandPending.current) return;
+    if (instruction.trim().length > 4000) {
+      setCaptureError("Shorten the instruction to 4,000 characters and send it again.");
+      return;
+    }
+    commandPending.current = true;
     setProcessing(true);
+    k.setNotice("");
+    setCaptureError("");
+    const request = retryCommand.current?.text === instruction ? retryCommand.current : {
+      id: crypto.randomUUID(), text: instruction, context: sessionStorage.getItem("onion-context") ?? "",
+    };
+    retryCommand.current = request;
     try {
-      const r = await api("/api/ai/command", {
-        id: crypto.randomUUID(),
-        text,
-        context: sessionStorage.getItem("onion-context") ?? "",
+      const result = await api("/api/ai/command", request);
+      retryCommand.current = null;
+      if (result.context) sessionStorage.setItem("onion-context", result.context);
+      if (result.completed || result.context) setText(draft => draft === instruction ? "" : draft);
+      if (result.operationId) await k.refresh();
+      setReply({
+        prompt: instruction, message: result.message, operationId: result.operationId,
+        relatedSuggestionIds: result.relatedSuggestionIds,
       });
-      k.setNotice(r.message);
-      if (r.context) sessionStorage.setItem("onion-context", r.context);
-      if (r.completed) setText((draft) => (draft === text ? "" : draft));
-      await k.refresh();
-    } catch (e: any) {
-      k.setError(e.message);
+    } catch (error: any) {
+      setReply({ prompt: instruction, message: error.message, failed: true });
     } finally {
+      const draft = draftInput.current;
+      const editingNext = document.activeElement === draft && !!draft?.value && draft.value !== instruction;
+      setReplyExpanded(!editingNext && tab === activeTab.current && !document.querySelector("dialog[open]"));
       setProcessing(false);
+      commandPending.current = false;
     }
   }
   async function connectAssistant() {
@@ -454,7 +479,7 @@ function App() {
     setCopyMessage("");
     try {
       if (ai.connected) {
-        setAi({ ...ai, ...(await api("/api/ai/disconnect", {})) });
+        confirmStatus(await api("/api/ai/disconnect", {}));
         return;
       }
       const response = await fetch("/api/ai/connect", {
@@ -497,7 +522,7 @@ function App() {
           }
           if (event.connected) {
             connected = true;
-            setAi({ ...event, schedules: ai.schedules });
+            confirmStatus(event);
             setSignIn(null);
             setModal((current) =>
               current?.kind === "ai-connect" ? null : current,
@@ -537,88 +562,6 @@ function App() {
         copied
           ? "Code copied."
           : "Code selected. Use Copy on your keyboard or touch menu.",
-      );
-    }
-  }
-  async function voice() {
-    if (recording) {
-      recorder.current?.stop();
-      setRecording(false);
-      return;
-    }
-    if (!ai.transcription) {
-      k.setError(
-        "Voice needs a transcription connection. Text and manual controls are ready to use.",
-      );
-      return;
-    }
-    try {
-      if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder)
-        throw new Error(
-          "Recording is unavailable in this browser. Type your instruction instead.",
-        );
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find(
-        (m) => MediaRecorder.isTypeSupported(m),
-      );
-      if (!mime) {
-        stream.getTracks().forEach((t) => t.stop());
-        throw new Error(
-          "This recording format is unsupported. Type your instruction instead.",
-        );
-      }
-      const r = new MediaRecorder(stream, { mimeType: mime }),
-        chunks: BlobPart[] = [];
-      recorder.current = r;
-      r.ondataavailable = (event) => {
-        if (event.data.size) chunks.push(event.data);
-      };
-      r.onerror = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        setRecording(false);
-        k.setError("Recording was interrupted. Your typed input is safe.");
-      };
-      r.onstop = async () => {
-        if (recordTimer.current) clearTimeout(recordTimer.current);
-        stream.getTracks().forEach((t) => t.stop());
-        setRecording(false);
-        const blob = new Blob(chunks, { type: mime });
-        if (blob.size < 300) {
-          k.setError("No speech recorded. Try again.");
-          return;
-        }
-        setTranscribing(true);
-        try {
-          const form = new FormData();
-          form.append(
-            "audio",
-            blob,
-            mime.includes("mp4") ? "voice.m4a" : "voice.webm",
-          );
-          const res = await fetch("/api/transcribe", {
-            method: "POST",
-            body: form,
-            signal: AbortSignal.timeout(125000),
-          });
-          const result: any = await res.json();
-          if (!res.ok) throw new Error(result.error);
-          setText((t) => [t, result.text].filter(Boolean).join(" "));
-        } catch (e: any) {
-          k.setError(e.message || "Transcription failed. Try again or type.");
-        } finally {
-          setTranscribing(false);
-        }
-      };
-      r.start();
-      setRecording(true);
-      recordTimer.current = setTimeout(() => {
-        if (r.state === "recording") r.stop();
-      }, 60000);
-    } catch (e: any) {
-      k.setError(
-        e.name === "NotAllowedError"
-          ? "Microphone access was declined. You can still type."
-          : e.message,
       );
     }
   }
@@ -1521,17 +1464,16 @@ function App() {
                       <div className="setting-row">
                         <div>
                           <strong>
-                            {ai.connected
-                              ? "ChatGPT connected"
-                              : "ChatGPT not connected"}
+                            {connectionKnown
+                              ? ai.connected ? "ChatGPT connected" : "ChatGPT not connected"
+                              : ai.busy ? "Assistant is busy" : checkingConnection ? "Checking connection…" : "Connection unavailable"}
                           </strong>
-                          <small>
-                            {ai.available
-                              ? "Available to the household"
-                              : (ai.error ?? "Assistant unavailable")}
-                          </small>
+                          {ai.error && <small>{ai.error}</small>}
                         </div>
-                        {user.role === "owner" && (
+                        {!checkingConnection && !connectionKnown && (
+                          <button onClick={retryStatus}>Check again</button>
+                        )}
+                        {user.role === "owner" && (connectionKnown || connecting || ai.login_pending) && (
                           <button
                             disabled={connecting && !signIn}
                             onClick={connectAssistant}
@@ -1608,8 +1550,8 @@ function App() {
                           <strong>Voice input</strong>
                           <small>
                             {ai.transcription
-                              ? "Voice transcription ready"
-                              : "Available when the assistant service is connected"}
+                              ? "Stop recording to transcribe and send."
+                              : checkingConnection ? "Checking availability…" : "Transcription unavailable"}
                           </small>
                         </div>
                       </div>
@@ -1685,6 +1627,19 @@ function App() {
               </div>
             </>
           )}
+          {reply && replyExpanded && (
+            <section className="assistant-reply" id="assistant-reply" tabIndex={-1} aria-labelledby="reply-title" ref={replySection}>
+              <div className="reply-header">
+                <h2 id="reply-title">{reply.failed ? "Couldn’t complete request" : "Assistant reply"}</h2>
+                <button className="text-button" onClick={() => { setReplyExpanded(false); draftInput.current?.focus(); }}>Hide reply</button>
+              </div>
+              <ReplyContent reply={reply} activity={state.activity.find(a => a.id === reply.operationId && a.actor === user.id)}
+                state={state} openRecipe={recipe => open("recipe-detail", recipe)}
+                openShopping={() => { setStore("all"); setTab("shop"); setReplyExpanded(false); }}
+                undo={latest && latest.id === reply.operationId ? () => quietly([{ type: "undo", id: latest.id }]) : undefined}
+              />
+            </section>
+          )}
         </main>
         <footer className="workspace-footer">
           <div className="capture-wrap">
@@ -1709,7 +1664,9 @@ function App() {
             )}
             <div className="assistant-bar">
               <h2>Kitchen assistant</h2>
-              {!ai.connected && <button
+              <span className="sr-only" role="status">{processing ? "Waiting for the assistant" : reply ? "Assistant reply available" : ""}</span>
+              {reply && !replyExpanded && <button className="text-button connect-link" onClick={() => setReplyExpanded(true)}>View reply</button>}
+              {canConnect && <button
                 className="text-button connect-link"
                 onClick={() => {
                   setTab("settings");
@@ -1721,10 +1678,14 @@ function App() {
               <button
                 className="mic"
                 aria-label={
-                  recording ? "Stop recording" : "Record an instruction"
+                  recording ? "Stop and send recording" : "Record an instruction"
                 }
-                onClick={voice}
-                disabled={transcribing}
+                onClick={() => {
+                  setCaptureError("");
+                  if (recording || ai.transcription) void voice.toggle();
+                  else setCaptureError("Voice transcription is unavailable. You can type your instruction.");
+                }}
+                disabled={processing || transcribing || voice.phase === "starting" || (checkingConnection && !ai.transcription)}
               >
                 {recording ? <Square size={18} /> : <Mic size={21} />}
               </button>
@@ -1738,17 +1699,17 @@ function App() {
                   aria-label="Ask the assistant"
                   placeholder={
                     recording
-                      ? "Listening… tap to stop"
+                      ? "Listening… stop to send"
                       : transcribing
                         ? "Transcribing…"
-                        : "Ask the assistant…"
+                        : processing ? "Working on your request…" : "Ask the kitchen assistant…"
                   }
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
+                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                       e.preventDefault();
-                      command();
+                      if (voice.phase === "idle") void command(text);
                     }
                   }}
                 />
@@ -1756,8 +1717,8 @@ function App() {
               <button
                 className="send"
                 aria-label="Send instruction"
-                disabled={!text.trim() || processing || recording}
-                onClick={command}
+                disabled={!text.trim() || processing || voice.phase !== "idle"}
+                onClick={() => void command(text)}
               >
                 {processing ? (
                   <span className="processing-dot" />
@@ -1794,9 +1755,10 @@ function App() {
                 </button>
               </div>
             )}
-            {(recording || transcribing) && (
+            {captureError && <p className="capture-hint error" role="alert">{captureError}</p>}
+            {(recording || transcribing || voice.phase === "starting") && (
               <p className="capture-hint" role="status">
-                {recording ? "Recording · 60 seconds max" : "Transcribing…"}
+                {recording ? "Stop to send · 60 seconds max" : transcribing ? "Transcribing…" : "Waiting for microphone…"}
               </p>
             )}
           </div>

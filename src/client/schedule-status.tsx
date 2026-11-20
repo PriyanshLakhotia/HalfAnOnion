@@ -17,7 +17,7 @@ export function ScheduleStatus({
   onManageStores,
 }: {
   configured: boolean | undefined;
-  connected: boolean;
+  connected: boolean | undefined;
   stores: Entity[];
   offerJobs: Record<string, any>;
   onManageStores: () => void;
@@ -94,7 +94,7 @@ export function ScheduleStatus({
       ) : (
         <p className="muted">Schedules are not configured.</p>
       )}
-      {!connected && (
+      {connected === false && (
         <p className="fine">Connect ChatGPT to generate suggestions.</p>
       )}
     </section>
